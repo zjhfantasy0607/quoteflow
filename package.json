@@ -1,0 +1,41 @@
+{
+  "name": "quoteflow",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/shared",
+    "apps/api",
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=22.12.0 <23"
+  },
+  "scripts": {
+    "build:shared": "npm run build -w @quoteflow/shared",
+    "dev": "npm run build:shared && concurrently -k -n shared,api,web -c gray,blue,green \"npm run dev -w @quoteflow/shared\" \"npm run dev -w @quoteflow/api\" \"npm run dev -w @quoteflow/web\"",
+    "build": "npm run build:shared && npm run build -w @quoteflow/api && npm run build -w @quoteflow/web",
+    "typecheck": "npm run build:shared && npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write \"apps/**/*.{ts,vue,json,css}\" \"packages/**/*.{ts,json}\" \"scripts/**/*.mjs\" \"*.{json,mjs}\"",
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "test": "npm run build:shared && npm run test --workspaces --if-present",
+    "test:e2e": "npm run build:shared && npm run test:e2e -w @quoteflow/api",
+    "verify": "npm run lint && npm run typecheck && npm run check:i18n && npm run test && npm run test:e2e",
+    "db:migrate": "npm run prisma:migrate -w @quoteflow/api",
+    "db:deploy": "npm run prisma:deploy -w @quoteflow/api",
+    "db:reset": "npm run prisma:reset -w @quoteflow/api",
+    "db:seed": "npm run build:shared && npm run seed -w @quoteflow/api",
+    "db:seed:demo": "npm run build:shared && npm run seed:demo -w @quoteflow/api"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "concurrently": "9.2.5",
+    "eslint": "9.39.5",
+    "eslint-plugin-vue": "10.11.1",
+    "globals": "17.13.0",
+    "prettier": "3.9.10",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.0",
+    "vue-eslint-parser": "10.4.1"
+  }
+}

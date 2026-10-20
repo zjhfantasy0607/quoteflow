@@ -1,0 +1,858 @@
+// QuoteFlow 询盘报价平台 — 数据模型
+// Prisma 6.19.x + PostgreSQL 16。所有时间字段为 timestamptz，存 UTC。
+// 金额：单价 Decimal(18,4)，合计 Decimal(18,2)。禁止用 Float 存金额。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// 枚举
+// ============================================================
+
+enum UserType {
+  INTERNAL
+  SUPPLIER
+}
+
+enum UserStatus {
+  PENDING_ACTIVATION
+  ACTIVE
+  DISABLED
+}
+
+enum DataScope {
+  SELF
+  DEPT
+  ALL
+}
+
+enum EnableStatus {
+  ENABLED
+  DISABLED
+}
+
+/// 询价单据状态（#22 草稿→审批→正式）
+enum InquiryDocStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  CANCELLED
+}
+
+/// 询比价资源状态（#23），挂在轮次上
+enum RoundStatus {
+  DRAFT
+  WAITING_QUOTES
+  QUOTES_CLOSED
+  OPENED
+  EVALUATED
+  SUPERSEDED
+  CANCELLED
+}
+
+/// 报价单状态（#24）
+enum QuoteStatus {
+  INVITED
+  SUBMITTED
+  DECLINED
+  EVALUATING
+  WON
+  LOST
+  VOID
+}
+
+enum QuoteVersionSource {
+  ONLINE
+  EXCEL
+  NEGOTIATION
+}
+
+enum NegotiationStatus {
+  OPEN
+  AGREED
+  CLOSED
+}
+
+enum NegotiationParty {
+  BUYER
+  SUPPLIER
+}
+
+enum NegotiationMsgType {
+  OFFER
+  COUNTER
+  ACCEPT
+  REJECT
+  CLOSE
+}
+
+enum ApprovalAction {
+  SUBMIT
+  APPROVE
+  REJECT
+}
+
+enum ContractStatus {
+  DRAFT
+  PENDING_REVIEW
+  PENDING_APPROVAL
+  APPROVED
+}
+
+enum EmailType {
+  INVITATION
+  REMINDER
+  OPENING
+  NEGOTIATION
+  AWARD
+  RESULT
+  CHANGE
+  APPROVAL
+  ACCOUNT
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum FileAccessAction {
+  PREVIEW
+  DOWNLOAD
+}
+
+enum PointsSource {
+  AUTO
+  MANUAL
+}
+
+// ============================================================
+// 账号与权限（M01）
+// ============================================================
+
+model User {
+  id             String     @id @default(cuid())
+  /// 内部用户为登录名；供应商用户为邮箱
+  username       String     @unique
+  passwordHash   String?
+  name           String
+  email          String?    @unique
+  phone          String?
+  userType       UserType   @default(INTERNAL)
+  status         UserStatus @default(ACTIVE)
+  /// zh-CN | en-US（#18 账号级语言）
+  locale         String     @default("zh-CN")
+  /// 字典 department
+  departmentCode String?
+  /// userType = SUPPLIER 时必填
+  supplierId     String?
+  lastLoginAt    DateTime?  @db.Timestamptz(3)
+  remark         String?
+  createdAt      DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime   @updatedAt @db.Timestamptz(3)
+
+  supplier            Supplier?            @relation(fields: [supplierId], references: [id])
+  roles               UserRole[]
+  sessions            Session[]
+  tokens              UserToken[]
+  ownedInquiries      Inquiry[]            @relation("InquiryOwner")
+  pdInquiries         Inquiry[]            @relation("InquiryPd")
+  createdInquiries    Inquiry[]            @relation("InquiryCreator")
+  inquiryApprovals    InquiryApproval[]    @relation("InquiryApprovalActor")
+  quoteVersions       QuoteVersion[]       @relation("QuoteVersionSubmitter")
+  negotiationMessages NegotiationMessage[] @relation("NegotiationMessageAuthor")
+  contractApprovals   ContractApproval[]   @relation("ContractApprovalActor")
+  auditLogs           AuditLog[]
+
+  @@index([supplierId])
+}
+
+model Role {
+  id               String    @id @default(cuid())
+  /// ADMIN | PD | BUYER | PURCHASE_MANAGER | CONTRACT_APPROVER | SUPPLIER | 自定义
+  code             String    @unique
+  nameZh           String
+  nameEn           String
+  description      String?
+  /// 预置角色不可删除、不可改 code
+  isPreset         Boolean   @default(false)
+  /// 供应商门户角色
+  forSupplier      Boolean   @default(false)
+  dataScope        DataScope @default(SELF)
+  /// 功能权限码，见 packages/shared/src/permissions.ts
+  permissions      String[]
+  /// 敏感字段码，见 packages/shared/src/field-permissions.ts
+  fieldPermissions String[]
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+
+  users UserRole[]
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+model Session {
+  /// sha256(token) 的 hex；明文 token 只存在于 cookie
+  id         String   @id
+  userId     String
+  expiresAt  DateTime @db.Timestamptz(3)
+  lastSeenAt DateTime @default(now()) @db.Timestamptz(3)
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// 激活 / 重置密码的一次性令牌
+model UserToken {
+  id        String    @id @default(cuid())
+  userId    String
+  /// ACTIVATE | RESET_PASSWORD
+  purpose   String
+  tokenHash String    @unique
+  expiresAt DateTime  @db.Timestamptz(3)
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ============================================================
+// 系统设置（M02）
+// ============================================================
+
+model DictType {
+  code     String  @id
+  nameZh   String
+  nameEn   String
+  /// 代码依赖的内置类型，不可删除
+  isSystem Boolean @default(false)
+
+  items DictItem[]
+}
+
+model DictItem {
+  id        String       @id @default(cuid())
+  typeCode  String
+  code      String
+  nameZh    String
+  nameEn    String
+  sort      Int          @default(0)
+  status    EnableStatus @default(ENABLED)
+  remark    String?
+  createdAt DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime     @updatedAt @db.Timestamptz(3)
+
+  type DictType @relation(fields: [typeCode], references: [code])
+
+  @@unique([typeCode, code])
+}
+
+model SystemParam {
+  key         String   @id
+  value       Json
+  description String?
+  updatedById String?
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+}
+
+/// 业务编号计数器，key 形如 RFQ:202611
+model Sequence {
+  key   String @id
+  value Int    @default(0)
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  actorId    String?
+  actorType  UserType?
+  /// 形如 inquiry.approve / round.open / role.update
+  action     String
+  entityType String
+  entityId   String?
+  summary    String?
+  detail     Json?
+  ip         String?
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+}
+
+// ============================================================
+// 文件（M02）
+// ============================================================
+
+model FileObject {
+  id           String   @id @default(cuid())
+  /// 存储驱动内的相对路径：yyyy/mm/<cuid>.<ext>
+  storageKey   String   @unique
+  originalName String
+  mimeType     String
+  size         Int
+  sha256       String
+  /// SPEC_DOC | PRODUCT_IMAGE | MATERIAL_IMAGE | ATTACHMENT | IMPORT | EXPORT
+  kind         String
+  uploadedById String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  materials    Material[]
+  inquiryFiles InquiryFile[]
+  attachments  Attachment[]
+  accessLogs   FileAccessLog[]
+}
+
+/// 文件预览/下载日志（#5 下载记日志）
+model FileAccessLog {
+  id         String           @id @default(cuid())
+  fileId     String
+  userId     String
+  supplierId String?
+  inquiryId  String?
+  action     FileAccessAction
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime         @default(now()) @db.Timestamptz(3)
+
+  file FileObject @relation(fields: [fileId], references: [id])
+
+  @@index([inquiryId, createdAt])
+  @@index([fileId])
+}
+
+/// 通用附件挂载（报价版本、议价消息、合同）。报价草稿的附件记在 Quote.draftValues.attachmentFileIds
+model Attachment {
+  id          String   @id @default(cuid())
+  /// QUOTE_VERSION | NEGOTIATION_MESSAGE | CONTRACT
+  ownerType   String
+  ownerId     String
+  fileId      String
+  createdById String
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  file FileObject @relation(fields: [fileId], references: [id])
+
+  @@index([ownerType, ownerId])
+  @@index([fileId])
+}
+
+// ============================================================
+// 主数据（M03 材料、M04 供应商、M05 PPL 模板）
+// ============================================================
+
+model MaterialCategory {
+  id             String       @id @default(cuid())
+  parentId       String?
+  code           String       @unique
+  nameZh         String
+  nameEn         String
+  /// 绑定的 PPL 变体；为空则继承上级，顶级也为空则用主模板
+  pplVariantCode String?
+  sort           Int          @default(0)
+  status         EnableStatus @default(ENABLED)
+  isPreset       Boolean      @default(false)
+  remark         String?
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
+
+  parent       MaterialCategory?          @relation("CategoryTree", fields: [parentId], references: [id])
+  children     MaterialCategory[]         @relation("CategoryTree")
+  materials    Material[]
+  suppliers    SupplierMaterialCategory[]
+  inquiries    Inquiry[]
+  inquiryLines InquiryLine[]
+
+  @@index([parentId])
+}
+
+model Material {
+  id          String       @id @default(cuid())
+  /// MAT-000001，可手填，留空自动生成
+  code        String       @unique
+  nameZh      String
+  nameEn      String?
+  spec        String
+  /// 字典 unit
+  unitCode    String
+  categoryId  String
+  brand       String?
+  imageFileId String?
+  status      EnableStatus @default(ENABLED)
+  remark      String?
+  createdById String?
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
+
+  category     MaterialCategory @relation(fields: [categoryId], references: [id])
+  image        FileObject?      @relation(fields: [imageFileId], references: [id])
+  inquiryLines InquiryLine[]
+
+  @@index([categoryId])
+  @@index([status])
+}
+
+model Supplier {
+  id                String       @id @default(cuid())
+  /// SUP10001，可手填，留空自动生成
+  code              String       @unique
+  nameZh            String
+  nameEn            String?
+  /// 统一社会信用代码，海外供应商可空
+  creditCode        String?      @unique
+  /// 字典 supplier_category：STRATEGIC | EXCELLENT | NORMAL（必填，#20）
+  categoryCode      String
+  country           String?
+  address           String?
+  contactName       String
+  contactEmail      String
+  contactPhone      String?
+  ccEmails          String[]
+  /// zh-CN | en-US | bilingual（决定邮件语言，#4）
+  preferredLanguage String       @default("zh-CN")
+  status            EnableStatus @default(ENABLED)
+  remark            String?
+  createdAt         DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime     @updatedAt @db.Timestamptz(3)
+
+  materialCategories SupplierMaterialCategory[]
+  users              User[]
+  invitations        InquiryInvitee[]
+  quotes             Quote[]
+  contracts          Contract[]
+  pointsEntries      SupplierPointsEntry[]
+
+  @@index([categoryCode])
+}
+
+model SupplierMaterialCategory {
+  supplierId String
+  categoryId String
+
+  supplier Supplier         @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  category MaterialCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([supplierId, categoryId])
+  @@index([categoryId])
+}
+
+/// 供应商积分流水（#26）
+model SupplierPointsEntry {
+  id          String       @id @default(cuid())
+  supplierId  String
+  delta       Int
+  /// QUOTE_ON_TIME | FAST_RESPONSE | WON | NO_RESPONSE | MANUAL
+  ruleCode    String
+  source      PointsSource
+  inquiryId   String?
+  roundId     String?
+  remark      String?
+  /// 幂等键，如 WON:<roundId>:<supplierId>
+  bizKey      String?      @unique
+  createdById String?
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+
+  @@index([supplierId, createdAt])
+}
+
+/// PPL 模板集：主模板 + 变体，整体版本化（见 docs/04-PPL模板规范.md）
+model PplTemplateSet {
+  version     Int      @id
+  label       String
+  isActive    Boolean  @default(false)
+  definition  Json
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+}
+
+// ============================================================
+// 询价（M06 单据与审批、M07 邀请发布、M13 规格变更）
+// ============================================================
+
+model Inquiry {
+  id                 String           @id @default(cuid())
+  /// DR-20261026-0001，创建即生成
+  draftNo            String           @unique
+  /// RFQ-202610-0001，审批通过时生成（#22）
+  formalNo           String?          @unique
+  /// 项目号，一个项目可多次询价（#1）
+  projectNo          String
+  title              String
+  materialCategoryId String
+  /// 字典 currency；一张询价单只用一种币种
+  currency           String           @default("CNY")
+  description        String?
+  docStatus          InquiryDocStatus @default(DRAFT)
+  /// 当前生效轮次（新轮次发布时才切换）
+  currentRoundNo     Int              @default(1)
+  /// 冗余：当前轮次状态，只能由 RoundStateService 维护（列表筛选用）
+  currentRoundStatus RoundStatus      @default(DRAFT)
+  /// 冗余：当前轮次截止时间（列表排序用）
+  currentDeadline    DateTime?        @db.Timestamptz(3)
+  /// 采购负责人
+  ownerId            String
+  /// PD 负责人
+  pdUserId           String?
+  createdById        String
+  /// 创建时取创建人的部门，用于数据权限 DEPT
+  departmentCode     String?
+  lastRejectComment  String?
+  submittedAt        DateTime?        @db.Timestamptz(3)
+  approvedAt         DateTime?        @db.Timestamptz(3)
+  approvedById       String?
+  cancelledAt        DateTime?        @db.Timestamptz(3)
+  cancelReason       String?
+  /// 评标完成即询盘完成（#11），之后整单只读
+  completedAt        DateTime?        @db.Timestamptz(3)
+  createdAt          DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime         @updatedAt @db.Timestamptz(3)
+
+  materialCategory MaterialCategory  @relation(fields: [materialCategoryId], references: [id])
+  owner            User              @relation("InquiryOwner", fields: [ownerId], references: [id])
+  pdUser           User?             @relation("InquiryPd", fields: [pdUserId], references: [id])
+  createdBy        User              @relation("InquiryCreator", fields: [createdById], references: [id])
+  rounds           InquiryRound[]
+  approvals        InquiryApproval[]
+  invitees         InquiryInvitee[]
+  contract         Contract?
+
+  @@index([projectNo])
+  @@index([docStatus, currentRoundStatus])
+  @@index([ownerId])
+}
+
+model InquiryApproval {
+  id        String         @id @default(cuid())
+  inquiryId String
+  action    ApprovalAction
+  comment   String?
+  actorId   String
+  createdAt DateTime       @default(now()) @db.Timestamptz(3)
+
+  inquiry Inquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  actor   User    @relation("InquiryApprovalActor", fields: [actorId], references: [id])
+
+  @@index([inquiryId])
+}
+
+/// 本单受邀名单（#3），发布轮次时据此生成 Quote
+model InquiryInvitee {
+  inquiryId  String
+  supplierId String
+  addedById  String
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  inquiry  Inquiry  @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+
+  @@id([inquiryId, supplierId])
+  @@index([supplierId])
+}
+
+model InquiryRound {
+  id                 String      @id @default(cuid())
+  inquiryId          String
+  roundNo            Int
+  status             RoundStatus @default(DRAFT)
+  deadline           DateTime?   @db.Timestamptz(3)
+  /// 第 2 轮起必填：变更原因（#12）
+  changeReason       String?
+  /// 第 2 轮起必填：主要变更内容
+  changeSummary      String?
+  /// 发布时冻结
+  pplTemplateVersion Int?
+  /// 发布时冻结
+  pplVariantCode     String?
+  publishedAt        DateTime?   @db.Timestamptz(3)
+  publishedById      String?
+  quotesClosedAt     DateTime?   @db.Timestamptz(3)
+  closedEarly        Boolean     @default(false)
+  openedAt           DateTime?   @db.Timestamptz(3)
+  openedById         String?
+  evaluatedAt        DateTime?   @db.Timestamptz(3)
+  awardedById        String?
+  awardComment       String?
+  /// 自动催报已发送时间，防止重复
+  autoReminderSentAt DateTime?   @db.Timestamptz(3)
+  createdById        String
+  createdAt          DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime    @updatedAt @db.Timestamptz(3)
+
+  inquiry Inquiry       @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  lines   InquiryLine[]
+  files   InquiryFile[]
+  quotes  Quote[]
+
+  @@unique([inquiryId, roundNo])
+  @@index([status, deadline])
+}
+
+model InquiryLine {
+  id           String   @id @default(cuid())
+  roundId      String
+  lineNo       Int
+  /// 从材料库选用时记录（#31）
+  materialId   String?
+  /// 询价行关联分类（#21）
+  categoryId   String
+  materialCode String?
+  nameZh       String
+  nameEn       String?
+  spec         String
+  unitCode     String
+  quantity     Decimal  @db.Decimal(18, 4)
+  brand        String?
+  drawingRef   String?
+  remark       String?
+  /// 新轮次复制来源（上一轮的行 id），用于规格对比（#12）
+  sourceLineId String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  round    InquiryRound     @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  material Material?        @relation(fields: [materialId], references: [id])
+  category MaterialCategory @relation(fields: [categoryId], references: [id])
+  files    InquiryFile[]
+
+  @@unique([roundId, lineNo])
+}
+
+/// 规格书与产品图（#2）。lineId 为空表示整单附件
+model InquiryFile {
+  id           String   @id @default(cuid())
+  roundId      String
+  lineId       String?
+  fileId       String
+  /// SPEC_DOC | PRODUCT_IMAGE
+  kind         String
+  sort         Int      @default(0)
+  uploadedById String
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  round InquiryRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  line  InquiryLine? @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  file  FileObject   @relation(fields: [fileId], references: [id])
+
+  @@index([roundId])
+  @@index([lineId])
+  @@index([fileId])
+}
+
+// ============================================================
+// 报价与议价（M09 报价、M10 开标、M11 议价、M12 定标）
+// ============================================================
+
+/// 每轮每家供应商一条报价单（#24）
+model Quote {
+  id                String      @id @default(cuid())
+  roundId           String
+  supplierId        String
+  status            QuoteStatus @default(INVITED)
+  invitedAt         DateTime    @default(now()) @db.Timestamptz(3)
+  firstViewedAt     DateTime?   @db.Timestamptz(3)
+  /// 首次提交或拒绝的时间，用于响应速度统计（#15）
+  respondedAt       DateTime?   @db.Timestamptz(3)
+  lastSubmittedAt   DateTime?   @db.Timestamptz(3)
+  /// 字典 decline_reason
+  declineReasonCode String?
+  declineReason     String?
+  declinedAt        DateTime?   @db.Timestamptz(3)
+  currentVersionId  String?     @unique
+  /// 供应商草稿，买方任何时候都不可见
+  draftValues       Json?
+  draftUpdatedAt    DateTime?   @db.Timestamptz(3)
+  /// 进入议价名单，每轮最多 2 家（#8）
+  shortlisted       Boolean     @default(false)
+  shortlistedAt     DateTime?   @db.Timestamptz(3)
+  createdAt         DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime    @updatedAt @db.Timestamptz(3)
+
+  round          InquiryRound   @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  supplier       Supplier       @relation(fields: [supplierId], references: [id])
+  currentVersion QuoteVersion?  @relation("QuoteCurrentVersion", fields: [currentVersionId], references: [id])
+  versions       QuoteVersion[] @relation("QuoteVersions")
+  negotiation    Negotiation?
+  contract       Contract?
+
+  @@unique([roundId, supplierId])
+  @@index([supplierId, status])
+}
+
+/// 报价版本（#9 历史版本可查）
+model QuoteVersion {
+  id                   String             @id @default(cuid())
+  quoteId              String
+  versionNo            Int
+  source               QuoteVersionSource
+  /// { lines: [{ lineId, values: { <列 key>: 值 } }] }
+  values               Json
+  /// 含税总价合计（冗余，便于排序与统计）
+  totalAmount          Decimal            @db.Decimal(18, 2)
+  currency             String
+  remark               String?
+  /// 变更备注（#7）
+  changeNote           String?
+  templateVersion      Int
+  variantCode          String
+  /// source = NEGOTIATION 时，指向促成成交的议价消息
+  negotiationMessageId String?            @unique
+  submittedById        String
+  submittedAt          DateTime           @default(now()) @db.Timestamptz(3)
+
+  quote              Quote               @relation("QuoteVersions", fields: [quoteId], references: [id], onDelete: Cascade)
+  currentOf          Quote?              @relation("QuoteCurrentVersion")
+  submittedBy        User                @relation("QuoteVersionSubmitter", fields: [submittedById], references: [id])
+  negotiationMessage NegotiationMessage? @relation(fields: [negotiationMessageId], references: [id])
+  contract           Contract?
+
+  @@unique([quoteId, versionNo])
+}
+
+model Negotiation {
+  id        String            @id @default(cuid())
+  quoteId   String            @unique
+  status    NegotiationStatus @default(OPEN)
+  agreedAt  DateTime?         @db.Timestamptz(3)
+  closedAt  DateTime?         @db.Timestamptz(3)
+  createdAt DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime          @updatedAt @db.Timestamptz(3)
+
+  quote    Quote                @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  messages NegotiationMessage[]
+}
+
+/// 议价往来，全程留痕（#30）
+model NegotiationMessage {
+  id            String             @id @default(cuid())
+  negotiationId String
+  seq           Int
+  party         NegotiationParty
+  type          NegotiationMsgType
+  /// [{ lineId, unitPriceInclTax?, quantity?, specNote? }]
+  lines         Json?
+  /// 方案说明 / 拒绝原因（REJECT、COUNTER 必填）
+  content       String?
+  replyToId     String?
+  createdById   String
+  createdAt     DateTime           @default(now()) @db.Timestamptz(3)
+
+  negotiation   Negotiation   @relation(fields: [negotiationId], references: [id], onDelete: Cascade)
+  createdBy     User          @relation("NegotiationMessageAuthor", fields: [createdById], references: [id])
+  resultVersion QuoteVersion?
+
+  @@unique([negotiationId, seq])
+}
+
+// ============================================================
+// 合同（M14）
+// ============================================================
+
+model Contract {
+  id               String         @id @default(cuid())
+  /// CT-202611-0001
+  contractNo       String         @unique
+  inquiryId        String         @unique
+  roundId          String
+  quoteId          String         @unique
+  quoteVersionId   String         @unique
+  supplierId       String
+  status           ContractStatus @default(DRAFT)
+  amount           Decimal        @db.Decimal(18, 2)
+  currency         String
+  deliveryDate     DateTime?      @db.Date
+  deliveryPlace    String?
+  paymentTerms     String?
+  summary          String?
+  remark           String?
+  /// 定标时的询价/报价快照（#25）
+  snapshot         Json
+  signedScanFileId String?
+  signedAt         DateTime?      @db.Timestamptz(3)
+  createdById      String
+  createdAt        DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime       @updatedAt @db.Timestamptz(3)
+
+  inquiry      Inquiry            @relation(fields: [inquiryId], references: [id])
+  quote        Quote              @relation(fields: [quoteId], references: [id])
+  quoteVersion QuoteVersion       @relation(fields: [quoteVersionId], references: [id])
+  supplier     Supplier           @relation(fields: [supplierId], references: [id])
+  approvals    ContractApproval[]
+
+  @@index([status])
+  @@index([supplierId])
+}
+
+model ContractApproval {
+  id         String         @id @default(cuid())
+  contractId String
+  /// SUBMIT | REVIEW | APPROVE
+  step       String
+  action     ApprovalAction
+  comment    String?
+  actorId    String
+  createdAt  DateTime       @default(now()) @db.Timestamptz(3)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  actor    User     @relation("ContractApprovalActor", fields: [actorId], references: [id])
+
+  @@index([contractId])
+}
+
+// ============================================================
+// 邮件（M02 基础设施，M07 起各模块使用）
+// ============================================================
+
+/// 邮件发件箱 + 发送记录（#4）
+model EmailMessage {
+  id            String      @id @default(cuid())
+  type          EmailType
+  /// zh-CN | en-US | bilingual
+  language      String
+  toAddresses   String[]
+  ccAddresses   String[]
+  subject       String
+  html          String
+  text          String
+  status        EmailStatus @default(PENDING)
+  attempts      Int         @default(0)
+  lastError     String?
+  nextAttemptAt DateTime    @default(now()) @db.Timestamptz(3)
+  sentAt        DateTime?   @db.Timestamptz(3)
+  supplierId    String?
+  userId        String?
+  inquiryId     String?
+  /// 幂等键，如 REMINDER:AUTO:<roundId>:<supplierId>
+  bizKey        String?     @unique
+  createdAt     DateTime    @default(now()) @db.Timestamptz(3)
+
+  @@index([status, nextAttemptAt])
+  @@index([type, createdAt])
+  @@index([supplierId])
+  @@index([inquiryId])
+}

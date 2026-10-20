@@ -1,0 +1,43 @@
+# QuoteFlow 开发依赖：PostgreSQL + Mailpit + 隧道容器
+# 运行在远程 Docker 主机（context: physical-host）上，Node 应用在本机运行。
+#
+#   启动：docker compose -f docker/compose.dev.yml up -d --build
+#   隧道：scripts/dev-tunnel.sh      （本机 127.0.0.1 端口 → 容器服务，见脚本注释）
+#   状态：docker compose -f docker/compose.dev.yml ps
+#   停止：docker compose -f docker/compose.dev.yml stop      （保留数据）
+#
+# 远程 Docker 的限制：
+# - bind mount 路径由服务端解释，本机目录不会被挂载，所以只用命名卷。
+# - 服务端发布的端口从本机连不上，所以不发布端口，统一走 scripts/dev-tunnel.sh。
+# 仅供开发：账号密码是固定的弱口令，不要放真实数据。
+
+name: quoteflow-dev
+
+services:
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: quoteflow
+      POSTGRES_PASSWORD: quoteflow_dev
+      POSTGRES_DB: quoteflow
+      TZ: UTC
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quoteflow -d quoteflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+
+  tunnel:
+    build: ./tunnel
+    image: quoteflow-dev-tunnel:latest
+    restart: unless-stopped
+
+volumes:
+  pgdata:

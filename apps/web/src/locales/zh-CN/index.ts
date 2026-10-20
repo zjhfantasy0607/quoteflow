@@ -1,0 +1,14 @@
+import auth from './auth';
+import common from './common';
+import enums from './enums';
+import errors from './errors';
+import nav from './nav';
+import system from './system';
+import workbench from './workbench';
+
+const zhCN = { common, nav, auth, workbench, system, enums, errors };
+
+export default zhCN;
+
+/** 全部文案的结构，en-US 必须与之一致 */
+export type MessageSchema = typeof zhCN;

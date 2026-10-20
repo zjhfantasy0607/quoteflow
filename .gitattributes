@@ -1,0 +1,12 @@
+# 统一 LF（与 .editorconfig 一致），不受本机 core.autocrlf 影响
+* text=auto eol=lf
+
+*.pptx binary
+*.xlsx binary
+*.xls binary
+*.docx binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.webp binary
+*.zip binary
