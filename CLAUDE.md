@@ -15,9 +15,9 @@ TypeScript 5.9.3 全栈 monorepo，npm workspaces，Node 24：
 
 - `packages/shared`：zod 4.6（`import { z } from 'zod'`，v4 API）+ decimal.js；前后端共享的枚举、错误码、权限码、schema、状态表、PPL 引擎。
 - `apps/api`：NestJS 11.2.7 + Prisma 7.10.1（客户端生成到 `src/generated/prisma`，经 `@prisma/adapter-pg` 连库）+ PostgreSQL 15；jest + supertest。
-- `apps/web`：Vue 3.5 + Vite 7.3 + Element Plus 2.14 + Pinia 3 + Vue Router 4.6 + vue-i18n 11 + ECharts 5；vitest。
+- `apps/web`：Vue 3.5 + Vite 8.3（Rolldown）+ Element Plus 2.14 + Pinia 4 + Vue Router 5.4 + vue-i18n 11 + ECharts 6；vitest 5。
 
-精确版本见 `docs/01-技术架构.md` §1，依赖一律写精确版本。npm 上的 TypeScript 7、Vite 8、NestJS 12、Prisma 8、Vue Router 5 都不要用；Prisma CLI 的升级提示忽略。新增依赖前在 `docs/待确认事项.md` 写理由。
+精确版本见 `docs/01-技术架构.md` §1，依赖一律写精确版本。TypeScript 7、NestJS 12、nodemailer 10、Prisma 8 暂不使用（原因见 01 §1）；Prisma CLI 的升级提示忽略。新增依赖前在 `docs/待确认事项.md` 写理由。
 
 ## 开发环境
 
