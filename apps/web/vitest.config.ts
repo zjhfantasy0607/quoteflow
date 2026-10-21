@@ -1,6 +1,6 @@
 import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vitest/config';
-import { sharedAlias } from './vite.config';
+import { sharedAlias } from './vite.config.ts';
 
 export default defineConfig({
   plugins: [vue()],
