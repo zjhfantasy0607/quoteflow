@@ -57,8 +57,8 @@ const dateParam = z
   .optional();
 
 export const emailListQuerySchema = pageQuerySchema.extend({
-  type: z.nativeEnum(EmailType).optional(),
-  status: z.nativeEnum(EmailStatus).optional(),
+  type: z.enum(EmailType).optional(),
+  status: z.enum(EmailStatus).optional(),
   language: z.enum(['zh-CN', 'en-US', 'bilingual']).optional(),
   keyword: optionalText(100),
   inquiryId: idSchema.optional(),

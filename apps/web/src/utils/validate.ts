@@ -1,32 +1,33 @@
 import type { ValidationIssue } from '@quoteflow/shared';
-import type { ZodIssue, ZodTypeAny } from 'zod';
+import type { z } from 'zod';
 import { i18n } from '@/i18n';
 
 export type FieldErrors = Record<string, string>;
 
-function messageFor(issue: ZodIssue): string {
+function messageFor(issue: z.core.$ZodIssue): string {
   const t = i18n.global.t;
   switch (issue.code) {
     case 'invalid_type':
-      return issue.received === 'undefined' || issue.received === 'null'
+      // 需要 safeParse 时传 reportInput，issue 才带 input
+      return issue.input === undefined || issue.input === null
         ? t('common.validation.required')
         : t('common.validation.invalid');
     case 'too_small':
-      if (issue.type === 'string' && issue.minimum === 1) return t('common.validation.required');
-      if (issue.type === 'array' && issue.minimum === 1) return t('common.validation.selectOne');
+      if (issue.origin === 'string' && issue.minimum === 1) return t('common.validation.required');
+      if (issue.origin === 'array' && issue.minimum === 1) return t('common.validation.selectOne');
       return t('common.validation.tooSmall', { min: String(issue.minimum) });
     case 'too_big':
       return t('common.validation.tooBig', { max: String(issue.maximum) });
-    case 'invalid_string':
-      return issue.validation === 'email' ? t('common.validation.email') : t('common.validation.format');
+    case 'invalid_format':
+      return issue.format === 'email' ? t('common.validation.email') : t('common.validation.format');
     default:
       return t('common.validation.invalid');
   }
 }
 
 /** 用 shared 里的 zod schema 校验表单，返回 { 字段路径: 提示 } */
-export function zodErrors(schema: ZodTypeAny, data: unknown): FieldErrors {
-  const result = schema.safeParse(data);
+export function zodErrors(schema: z.ZodType, data: unknown): FieldErrors {
+  const result = schema.safeParse(data, { reportInput: true });
   if (result.success) return {};
   const errors: FieldErrors = {};
   for (const issue of result.error.issues) {
