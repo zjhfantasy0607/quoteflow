@@ -11,7 +11,7 @@
 
 ## 技术栈（版本已锁定，不升级大版本）
 
-TypeScript 5.9.3 全栈 monorepo，npm workspaces，Node 22：
+TypeScript 5.9.3 全栈 monorepo，npm workspaces，Node 24：
 
 - `packages/shared`：zod 3.25（`import { z } from 'zod'`，v3 API）+ decimal.js；前后端共享的枚举、错误码、权限码、schema、状态表、PPL 引擎。
 - `apps/api`：NestJS 11.2.7 + Prisma 6.19.3 + PostgreSQL 15；jest + supertest。
