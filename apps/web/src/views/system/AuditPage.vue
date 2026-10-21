@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/auth';
 import { formatDateTime } from '@/utils/format';
 
 /** 目前会写操作日志的对象类型；未翻译的类型和动作直接显示代码 */
-const ENTITY_TYPES = ['user', 'role', 'dictType', 'dictItem', 'systemParam', 'email'];
+const ENTITY_TYPES = ['user', 'role', 'dictType', 'dictItem', 'systemParam', 'email', 'materialCategory', 'material'];
 
 const { t, te } = useI18n();
 const auth = useAuthStore();

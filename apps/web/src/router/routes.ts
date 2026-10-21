@@ -16,6 +16,28 @@ export const buyerRoute: RouteRecordRaw = {
       meta: { titleKey: 'nav.workbench', userType: 'INTERNAL', menu: { icon: 'House', order: 0 } },
     },
     {
+      path: 'materials',
+      name: 'materials',
+      component: () => import('@/views/materials/MaterialsPage.vue'),
+      meta: {
+        titleKey: 'nav.materials',
+        userType: 'INTERNAL',
+        perm: 'material:view',
+        menu: { icon: 'Goods', order: 400, groupKey: 'nav.materialsGroup', groupIcon: 'Box' },
+      },
+    },
+    {
+      path: 'materials/categories',
+      name: 'material-categories',
+      component: () => import('@/views/materials/MaterialCategoriesPage.vue'),
+      meta: {
+        titleKey: 'nav.materialCategories',
+        userType: 'INTERNAL',
+        perm: 'material:view',
+        menu: { icon: 'FolderOpened', order: 401, groupKey: 'nav.materialsGroup', groupIcon: 'Box' },
+      },
+    },
+    {
       path: 'system/users',
       name: 'system-users',
       component: () => import('@/views/system/UsersPage.vue'),

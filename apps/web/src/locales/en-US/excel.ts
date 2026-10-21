@@ -27,6 +27,13 @@ const excel: LocaleMessages['excel'] = {
     invalid_number: 'Must be a number',
     too_many_decimals: 'At most {max} decimal places',
     too_small: 'Must be at least {min}',
+    invalid_code: 'Codes may only contain letters, digits and . _ / -',
+    duplicate_code: 'Same code as row {row}',
+    unit_not_found: 'Unknown unit. Use the unit code or its Chinese / English name',
+    unit_disabled: 'This unit is disabled',
+    category_not_found: 'Unknown category code',
+    category_disabled: 'This category is disabled',
+    invalid_status: 'Must be Enabled or Disabled',
   },
 };
 

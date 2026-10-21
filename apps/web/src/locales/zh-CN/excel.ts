@@ -25,5 +25,12 @@ export default {
     invalid_number: '应为数字',
     too_many_decimals: '小数不能超过 {max} 位',
     too_small: '不能小于 {min}',
+    invalid_code: '编码只能包含字母、数字和 . _ / -',
+    duplicate_code: '与第 {row} 行的编码重复',
+    unit_not_found: '没有这个单位，请填写单位编码或中文 / 英文名称',
+    unit_disabled: '单位已停用',
+    category_not_found: '没有这个分类编码',
+    category_disabled: '分类已停用',
+    invalid_status: '只能填写"启用"或"停用"',
   },
 };
