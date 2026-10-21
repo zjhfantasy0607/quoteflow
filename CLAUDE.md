@@ -19,16 +19,15 @@ TypeScript 5.9.3 全栈 monorepo，npm workspaces，Node 22：
 
 精确版本见 `docs/01-技术架构.md` §1，依赖一律写精确版本。npm 上的 TypeScript 7、Vite 8、NestJS 12、Prisma 7/8、Vue Router 5、Zod 4 都不要用；Prisma CLI 的升级提示忽略。新增依赖前在 `docs/待确认事项.md` 写理由。
 
-## 开发环境（Docker 在远程主机）
+## 开发环境
 
-- Docker CLI 连接远程主机（context `physical-host`）。bind mount 不会挂载本机目录，服务端发布的端口本机也连不上。不要安装或修改 Docker 本身。
-- 依赖跑在远程 Docker，Node 跑在本机，中间走隧道：
-  1. `docker compose -f docker/compose.dev.yml up -d --build`（PostgreSQL 15、Mailpit、隧道容器）
-  2. `scripts/dev-tunnel.sh`（长进程，放后台运行）：`127.0.0.1:15432` → PostgreSQL（库/用户 `quoteflow`，密码 `quoteflow_dev`），`127.0.0.1:11025` → SMTP，`http://127.0.0.1:18025` → Mailpit
-  3. `cp apps/api/.env.example apps/api/.env` → `npm install` → `npm run db:migrate` → `npm run db:seed` → `npm run dev`（api `:3000`，web `http://127.0.0.1:5173`）
-- 报 `P1001` 连不上数据库时先检查隧道。e2e 用 `quoteflow_test` 库（globalSetup 跑 `prisma migrate deploy`，各测试文件自己 TRUNCATE），绝不能连开发库。
+- 依赖跑在本机 Docker，Node 直接跑在本机。不要安装或修改 Docker 本身。
+  1. `docker compose -f docker/compose.dev.yml up -d`（PostgreSQL 15、Mailpit，端口只绑定 127.0.0.1）：`127.0.0.1:15432` → PostgreSQL（库/用户 `quoteflow`，密码 `quoteflow_dev`），`127.0.0.1:11025` → SMTP，`http://127.0.0.1:18025` → Mailpit
+  2. `cp apps/api/.env.example apps/api/.env` → `npm install` → `npm run db:migrate` → `npm run db:seed` → `npm run dev`（api `:3000`，web `http://127.0.0.1:5173`）
+- 报 `P1001` 连不上数据库时先用 `docker compose -f docker/compose.dev.yml ps` 看容器是否在运行。e2e 用 `quoteflow_test` 库（globalSetup 跑 `prisma migrate deploy`，各测试文件自己 TRUNCATE），绝不能连开发库。
+- 开发机是 Windows：npm 脚本由 cmd.exe 执行，`package.json` 里不要写 `VAR=x cmd`、`rm -rf`、单引号等 POSIX 写法，需要时写成 Node 脚本（参考 `scripts/check-i18n.mjs`）。`npm run dev` 运行时执行 `npm install` / `npm run db:migrate` / `prisma generate` 会报 `EPERM`（Prisma 引擎 DLL 被占用），先停掉 dev。
 - 不要自己运行 `npm run db:reset` / `prisma migrate reset`：Prisma 会拦截 AI 代理执行的破坏性命令，必须由用户执行或得到用户明确同意。
-- 远程 Docker 上只操作 `quoteflow-` 前缀的容器、卷、网络和镜像；禁止 prune，禁止动其他项目的资源。
+- Docker 上只操作 `quoteflow-` 前缀的容器、卷、网络和镜像；禁止 prune，禁止动其他项目的资源。
 
 ## 常用命令
 
@@ -36,7 +35,7 @@ TypeScript 5.9.3 全栈 monorepo，npm workspaces，Node 22：
 |---|---|
 | `npm run dev` | shared watch + api + web |
 | `npm run verify` | lint + typecheck + check:i18n + test + test:e2e；宣告完成前必须全绿 |
-| `npm run test` / `npm run test:e2e` | 单元测试 / e2e（e2e 需要隧道） |
+| `npm run test` / `npm run test:e2e` | 单元测试 / e2e（e2e 需要先启动 Docker 依赖） |
 | `npm run db:migrate` / `db:reset` / `db:seed` / `db:seed:demo` | 数据库迁移、重置、基础数据、演示数据 |
 
 ## 工作方式
@@ -56,7 +55,7 @@ TypeScript 5.9.3 全栈 monorepo，npm workspaces，Node 22：
 - **金额与时间**：金额用 Prisma Decimal 或字符串，计算只用 shared 里的 decimal 函数，禁止用 JS number 算金额；取当前时间只用 `ClockService.now()`；数据库存 UTC，界面和邮件按 UTC+8 显示并注明时区。
 - **多语言**：前端不准硬编码中英文文案，全部走 vue-i18n，zh-CN 和 en-US 的键必须一致；后端只返回错误码；业务数据按 `nameZh` / `nameEn` 显示。
 - **范围**：不做订单、发货、对账、库存、租赁、综合评分、公开招标、电子签、供应商准入/绩效/黑名单、站内信、移动端、ERP 对接。
-- 不要修改根目录的 PPT 和 `Docker-服务使用说明.md`。
+- 不要修改根目录的 PPT。
 
 ## 完成标准
 
