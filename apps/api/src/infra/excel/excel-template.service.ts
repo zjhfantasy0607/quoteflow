@@ -21,6 +21,11 @@ export interface ExcelColumn {
   width?: number;
   /** 下拉选项（只用于模板里的数据验证提示，取值校验由调用方做） */
   options?: string[];
+  /**
+   * 文件里可以整列没有（只能是最后几列）。用于"导出比模板多几列、导出文件改完可以直接导入"的场景，
+   * 如材料导出多一列"状态"（R03-8）；没有这一列时取值为 null。
+   */
+  omittable?: boolean;
 }
 
 export interface ExcelSheetDef {
@@ -112,12 +117,12 @@ export class ExcelTemplateService {
     const ws: Worksheet | undefined = wb.getWorksheet(def.sheetName) ?? wb.worksheets[0];
     if (!ws) throw new AppException('EXCEL_PARSE_FAILED');
 
-    this.checkHeader(def, ws);
+    const present = this.checkHeader(def, ws);
 
     const rows: ParsedRow[] = [];
     const errors: ExcelRowError[] = [];
     for (let r = 2; r <= ws.rowCount; r += 1) {
-      const raw = def.columns.map((_, i) => cellToValue(ws.getRow(r).getCell(i + 1).value));
+      const raw = def.columns.map((_, i) => (i < present ? cellToValue(ws.getRow(r).getCell(i + 1).value) : null));
       if (raw.every((v) => v === null)) continue;
       if (rows.length >= MAX_IMPORT_ROWS) throw new AppException('EXCEL_TOO_MANY_ROWS', { max: MAX_IMPORT_ROWS });
       const values: Record<string, ExcelValue> = {};
@@ -137,17 +142,22 @@ export class ExcelTemplateService {
     throw new AppException('EXCEL_ROWS_INVALID', { count: errors.length }, sorted.slice(0, MAX_REPORTED_ERRORS));
   }
 
-  private checkHeader(def: ExcelSheetDef, ws: Worksheet): void {
-    const expected = def.columns.map((c) => normalizeHeader(c.header));
-    const width = Math.max(ws.getRow(1).cellCount, expected.length);
+  /** 表头一致时返回文件里实际有的列数（末尾的可省略列可能不在） */
+  private checkHeader(def: ExcelSheetDef, ws: Worksheet): number {
+    const all = def.columns.map((c) => normalizeHeader(c.header));
+    let required = all.length;
+    while (required > 0 && def.columns[required - 1].omittable) required -= 1;
+    const width = Math.max(ws.getRow(1).cellCount, all.length);
     const actual: string[] = [];
     for (let i = 1; i <= width; i += 1) {
       const v = cellToValue(ws.getRow(1).getCell(i).value);
       actual.push(v === null ? '' : normalizeHeader(String(v)));
     }
     while (actual.length && actual[actual.length - 1] === '') actual.pop();
-    const same = actual.length === expected.length && actual.every((h, i) => h === expected[i]);
-    if (same) return;
+    const same = actual.length >= required && actual.length <= all.length && actual.every((h, i) => h === all[i]);
+    if (same) return actual.length;
+    // 文件里出现了可省略列，就按完整表头比较，否则按模板表头比较，提示才准确
+    const expected = actual.some((h) => all.indexOf(h) >= required) ? all : all.slice(0, required);
     const details: ExcelHeaderErrorDetails = {
       expected,
       actual,

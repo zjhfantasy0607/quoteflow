@@ -15,6 +15,8 @@ import { ParamsModule } from './infra/params/params.service';
 import { SequenceModule } from './infra/sequences/sequence.service';
 import { AuthModule } from './modules/auth/auth.controller';
 import { DictsModule } from './modules/dicts/dicts.controller';
+import { MaterialCategoriesModule } from './modules/material-categories/material-categories.controller';
+import { MaterialsModule } from './modules/materials/materials.controller';
 import { RolesModule } from './modules/roles/roles.controller';
 import { UsersModule } from './modules/users/users.controller';
 import { PrismaModule } from './prisma/prisma.service';
@@ -41,6 +43,8 @@ const scheduler = process.env.JOBS_ENABLED === 'false' ? [] : [ScheduleModule.fo
     AuthModule,
     UsersModule,
     RolesModule,
+    MaterialCategoriesModule,
+    MaterialsModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })

@@ -7,17 +7,25 @@ type Client = PrismaService | Prisma.TransactionClient;
 
 const pad = (n: number, width: number) => String(n).padStart(width, '0');
 
+/** MAT-000001 */
+export const formatMaterialCode = (n: number) => `MAT-${pad(n, 6)}`;
+
 /** 业务编号（docs/01 §13）：INSERT ... ON CONFLICT 原子自增，并发安全；日期按 UTC+8 */
 @Injectable()
 export class SequenceService {
   constructor(private readonly prisma: PrismaService) {}
 
   async next(key: string, client: Client = this.prisma): Promise<number> {
+    return this.nextRange(key, 1, client);
+  }
+
+  /** 一次取 count 个连续的号（批量导入用），返回第一个 */
+  async nextRange(key: string, count: number, client: Client = this.prisma): Promise<number> {
     const rows = await client.$queryRaw<{ value: number }[]>`
-      INSERT INTO "Sequence" ("key", "value") VALUES (${key}, 1)
-      ON CONFLICT ("key") DO UPDATE SET "value" = "Sequence"."value" + 1
+      INSERT INTO "Sequence" ("key", "value") VALUES (${key}, ${count})
+      ON CONFLICT ("key") DO UPDATE SET "value" = "Sequence"."value" + ${count}
       RETURNING "value"`;
-    return rows[0].value;
+    return rows[0].value - count + 1;
   }
 
   /** 种子数据用：保证计数器至少为 value（下一个号从 value + 1 开始） */
@@ -45,9 +53,9 @@ export class SequenceService {
     return `CT-${month}-${pad(await this.next(`CT:${month}`, client), 4)}`;
   }
 
-  /** MAT-000001（全局） */
+  /** MAT-000001（全局）。可能和手填的编码撞号，材料模块取号时会跳过已占用的 */
   async materialCode(client: Client = this.prisma): Promise<string> {
-    return `MAT-${pad(await this.next('MAT', client), 6)}`;
+    return formatMaterialCode(await this.next('MAT', client));
   }
 
   /** SUP10001 起（全局） */

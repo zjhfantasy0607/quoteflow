@@ -384,7 +384,8 @@ model MaterialCategory {
   createdAt      DateTime     @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
 
-  parent       MaterialCategory?          @relation("CategoryTree", fields: [parentId], references: [id])
+  /// 有下级的分类不能删除（R03-3），由数据库兜底
+  parent       MaterialCategory?          @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
   children     MaterialCategory[]         @relation("CategoryTree")
   materials    Material[]
   suppliers    SupplierMaterialCategory[]
@@ -458,7 +459,8 @@ model SupplierMaterialCategory {
   categoryId String
 
   supplier Supplier         @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  category MaterialCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  /// 被供应商引用的分类不能删除（R03-3）
+  category MaterialCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
   @@id([supplierId, categoryId])
   @@index([categoryId])

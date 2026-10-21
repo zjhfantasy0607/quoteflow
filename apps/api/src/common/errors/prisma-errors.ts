@@ -25,3 +25,8 @@ export function isUniqueViolation(error: unknown, field?: string): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') return false;
   return !field || uniqueViolationFields(error).includes(field);
 }
+
+/** 是否违反外键约束（P2003），如删除仍被 RESTRICT 外键引用的记录 */
+export function isForeignKeyViolation(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003';
+}

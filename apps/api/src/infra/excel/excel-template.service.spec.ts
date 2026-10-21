@@ -81,6 +81,50 @@ describe('ExcelTemplateService（R02-9）', () => {
     await expectError(Promise.resolve().then(() => svc.assertNoRowErrors(errors)), 'EXCEL_ROWS_INVALID');
   });
 
+  describe('末尾的可省略列（导出比模板多的列）', () => {
+    const withStatus: ExcelSheetDef = {
+      sheetName: '材料 Materials',
+      columns: [
+        { key: 'code', header: '物料编码 / Material Code' },
+        { key: 'name', header: '物料名称 / Material Name', required: true },
+        { key: 'status', header: '状态 / Status', omittable: true },
+      ],
+    };
+    const headers = withStatus.columns.map((c) => c.header);
+
+    async function file(header: string[], rows: (string | null)[][]): Promise<Buffer> {
+      const wb = new Workbook();
+      const ws = wb.addWorksheet(withStatus.sheetName);
+      ws.addRow(header);
+      rows.forEach((r) => ws.addRow(r));
+      return Buffer.from(await wb.xlsx.writeBuffer());
+    }
+
+    it('有这一列和没有这一列都能导入；没有时取值为 null，表头之外的单元格忽略', async () => {
+      const full = await svc.parse(withStatus, await file(headers, [['A', '灯珠', '停用']]));
+      expect(full.rows[0].values).toEqual({ code: 'A', name: '灯珠', status: '停用' });
+      const short = await svc.parse(withStatus, await file(headers.slice(0, 2), [['A', '灯珠', '多余内容']]));
+      expect(short.rows[0].values).toEqual({ code: 'A', name: '灯珠', status: null });
+    });
+
+    it('表头不一致时：文件里没有可省略列就按模板表头提示', async () => {
+      const err = await expectError(
+        svc.parse(withStatus, await file(['物料编码 / Material Code', '名称 / Name'], [])),
+        'EXCEL_HEADER_MISMATCH',
+      );
+      expect(err.details).toMatchObject({
+        expected: headers.slice(0, 2),
+        missing: ['物料名称 / Material Name'],
+        extra: ['名称 / Name'],
+      });
+      const withExtra = await expectError(
+        svc.parse(withStatus, await file(['状态 / Status', ...headers.slice(0, 2)], [])),
+        'EXCEL_HEADER_MISMATCH',
+      );
+      expect(withExtra.details).toMatchObject({ expected: headers, orderMismatch: true });
+    });
+  });
+
   it('没有数据行返回 EXCEL_EMPTY；不是 xlsx 返回 EXCEL_PARSE_FAILED', async () => {
     await expectError(svc.parse(def, await sheet([])), 'EXCEL_EMPTY');
     await expectError(svc.parse(def, Buffer.from('not an xlsx')), 'EXCEL_PARSE_FAILED');
