@@ -14,10 +14,10 @@
 TypeScript 5.9.3 全栈 monorepo，npm workspaces，Node 24：
 
 - `packages/shared`：zod 4.6（`import { z } from 'zod'`，v4 API）+ decimal.js；前后端共享的枚举、错误码、权限码、schema、状态表、PPL 引擎。
-- `apps/api`：NestJS 11.2.7 + Prisma 6.19.3 + PostgreSQL 15；jest + supertest。
+- `apps/api`：NestJS 11.2.7 + Prisma 7.10.1（客户端生成到 `src/generated/prisma`，经 `@prisma/adapter-pg` 连库）+ PostgreSQL 15；jest + supertest。
 - `apps/web`：Vue 3.5 + Vite 7.3 + Element Plus 2.14 + Pinia 3 + Vue Router 4.6 + vue-i18n 11 + ECharts 5；vitest。
 
-精确版本见 `docs/01-技术架构.md` §1，依赖一律写精确版本。npm 上的 TypeScript 7、Vite 8、NestJS 12、Prisma 7/8、Vue Router 5 都不要用；Prisma CLI 的升级提示忽略。新增依赖前在 `docs/待确认事项.md` 写理由。
+精确版本见 `docs/01-技术架构.md` §1，依赖一律写精确版本。npm 上的 TypeScript 7、Vite 8、NestJS 12、Prisma 8、Vue Router 5 都不要用；Prisma CLI 的升级提示忽略。新增依赖前在 `docs/待确认事项.md` 写理由。
 
 ## 开发环境
 
@@ -25,7 +25,7 @@ TypeScript 5.9.3 全栈 monorepo，npm workspaces，Node 24：
   1. `docker compose -f docker/compose.dev.yml up -d`（PostgreSQL 15、Mailpit，端口只绑定 127.0.0.1）：`127.0.0.1:15432` → PostgreSQL（库/用户 `quoteflow`，密码 `quoteflow_dev`），`127.0.0.1:11025` → SMTP，`http://127.0.0.1:18025` → Mailpit
   2. `cp apps/api/.env.example apps/api/.env` → `npm install` → `npm run db:migrate` → `npm run db:seed` → `npm run dev`（api `:3000`，web `http://127.0.0.1:5173`）
 - 报 `P1001` 连不上数据库时先用 `docker compose -f docker/compose.dev.yml ps` 看容器是否在运行。e2e 用 `quoteflow_test` 库（globalSetup 跑 `prisma migrate deploy`，各测试文件自己 TRUNCATE），绝不能连开发库。
-- 开发机是 Windows：npm 脚本由 cmd.exe 执行，`package.json` 里不要写 `VAR=x cmd`、`rm -rf`、单引号等 POSIX 写法，需要时写成 Node 脚本（参考 `scripts/check-i18n.mjs`）。`npm run dev` 运行时执行 `npm install` / `npm run db:migrate` / `prisma generate` 会报 `EPERM`（Prisma 引擎 DLL 被占用），先停掉 dev。
+- 开发机是 Windows：npm 脚本由 cmd.exe 执行，`package.json` 里不要写 `VAR=x cmd`、`rm -rf`、单引号等 POSIX 写法，需要时写成 Node 脚本（参考 `scripts/check-i18n.mjs`）。装依赖（`npm install`）前先停掉 `npm run dev`，否则 Windows 可能锁住正在使用的原生文件报 `EPERM`。
 - 不要自己运行 `npm run db:reset` / `prisma migrate reset`：Prisma 会拦截 AI 代理执行的破坏性命令，必须由用户执行或得到用户明确同意。
 - Docker 上只操作 `quoteflow-` 前缀的容器、卷、网络和镜像；禁止 prune，禁止动其他项目的资源。
 

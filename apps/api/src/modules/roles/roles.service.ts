@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import {
   isFieldPermissionCode,
   isPermissionCode,
@@ -11,6 +10,7 @@ import {
 import type { AuthUser } from '../../common/auth/auth-user';
 import { AppException } from '../../common/errors/app.exception';
 import { isUniqueViolation } from '../../common/errors/prisma-errors';
+import { Prisma } from '../../generated/prisma/client';
 import { AuditService } from '../../infra/audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 

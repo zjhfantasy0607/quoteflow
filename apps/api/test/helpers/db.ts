@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '../../src/generated/prisma/client';
 
 /** 清空全部业务表（保留迁移记录） */
 export async function resetDb(prisma: PrismaClient): Promise<void> {

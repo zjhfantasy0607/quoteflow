@@ -1,6 +1,6 @@
 import { Global, Injectable, Module } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { inAppTz } from '../../common/time';
+import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 type Client = PrismaService | Prisma.TransactionClient;

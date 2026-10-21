@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import {
   isStrongPassword,
   type CreateUserInput,
@@ -17,6 +16,7 @@ import { SessionService } from '../../common/auth/session.service';
 import { AppException } from '../../common/errors/app.exception';
 import { isUniqueViolation } from '../../common/errors/prisma-errors';
 import { skipTake, toPaginated } from '../../common/pagination';
+import { Prisma } from '../../generated/prisma/client';
 import { AuditService } from '../../infra/audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DictsService } from '../dicts/dicts.service';

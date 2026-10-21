@@ -1,5 +1,4 @@
 import { Controller, Get, Global, HttpCode, Module, Param, Post, Query } from '@nestjs/common';
-import { EmailMessage, Prisma } from '@prisma/client';
 import {
   emailListQuerySchema,
   type EmailDetailDto,
@@ -14,6 +13,7 @@ import { AppException } from '../../common/errors/app.exception';
 import { skipTake, toPaginated } from '../../common/pagination';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { inAppTz } from '../../common/time';
+import { EmailMessage, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { MailOutboxJob } from './mail-outbox.job';

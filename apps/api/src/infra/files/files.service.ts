@@ -1,5 +1,4 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { FileObject } from '@prisma/client';
 import type { FileDto, FileKind, SheetPreviewDto, UploadKind } from '@quoteflow/shared';
 import { Workbook } from 'exceljs';
 import { createHash, randomUUID } from 'node:crypto';
@@ -8,6 +7,7 @@ import type { AuthUser } from '../../common/auth/auth-user';
 import { ClockService } from '../../common/clock/clock.service';
 import { AppException } from '../../common/errors/app.exception';
 import { inAppTz } from '../../common/time';
+import type { FileObject } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ParamsService } from '../params/params.service';
 import { FileAccessRegistry, type FileAccessDecision } from './file-access.registry';

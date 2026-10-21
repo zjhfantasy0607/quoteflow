@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../generated/prisma/client';
 import type { AuthUser } from './auth-user';
 
 /** 数据权限（docs/05 §11）：询价单及其派生对象都要叠加 inquiryWhere */

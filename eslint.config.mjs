@@ -14,6 +14,7 @@ export default defineConfig(
       '**/playwright-report/**',
       'apps/api/prisma/migrations/**',
       'apps/api/storage/**',
+      'apps/api/src/generated/**',
       'docs/**',
     ],
   },

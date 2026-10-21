@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { DATA_SCOPE_RANK, type DataScope, type Locale } from '@quoteflow/shared';
 import { createHash, randomBytes } from 'node:crypto';
 import type { CookieOptions } from 'express';
 import { AppConfig } from '../../config/app-config';
+import { Prisma } from '../../generated/prisma/client';
 import { ParamsService } from '../../infra/params/params.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClockService } from '../clock/clock.service';

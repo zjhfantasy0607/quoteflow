@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { FileObject } from '@prisma/client';
 import type { AuthUser } from '../../common/auth/auth-user';
+import type { FileObject } from '../../generated/prisma/client';
 
 /** 解析器对某个文件的判断；文件不归它管时返回 null */
 export interface FileAccessDecision {

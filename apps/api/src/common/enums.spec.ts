@@ -1,5 +1,5 @@
-import { $Enums } from '@prisma/client';
 import { DB_ENUMS } from '@quoteflow/shared';
+import { $Enums } from '../generated/prisma/client';
 
 describe('shared 枚举与 Prisma 枚举一致', () => {
   for (const [name, values] of Object.entries(DB_ENUMS)) {

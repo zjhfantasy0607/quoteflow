@@ -1,9 +1,10 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { ApiErrorBody, ERROR_HTTP_STATUS, ErrorCode, ValidationIssue } from '@quoteflow/shared';
 import type { Response } from 'express';
 import { ZodError } from 'zod';
+import { Prisma } from '../../generated/prisma/client';
 import { AppException } from './app.exception';
+import { uniqueViolationFields } from './prisma-errors';
 
 /** 把所有异常转换成统一的错误响应体（docs/03 §3） */
 @Catch()
@@ -28,7 +29,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
     if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       if (exception.code === 'P2002') {
-        return error('CONFLICT', 'Unique constraint violation', { fields: exception.meta?.target });
+        return error('CONFLICT', 'Unique constraint violation', { fields: uniqueViolationFields(exception) });
       }
       if (exception.code === 'P2025') {
         return error('NOT_FOUND', 'Record not found');

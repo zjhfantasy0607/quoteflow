@@ -1,11 +1,11 @@
 import { Controller, Get, Global, Injectable, Module, Query } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { auditListQuerySchema, type AuditListQuery, type AuditLogDto, type Paginated, type UserType } from '@quoteflow/shared';
 import type { AuthUser } from '../../common/auth/auth-user';
 import { RequirePermissions } from '../../common/auth/decorators';
 import { skipTake, toPaginated } from '../../common/pagination';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { inAppTz } from '../../common/time';
+import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export interface AuditEntry {

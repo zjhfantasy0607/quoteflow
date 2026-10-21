@@ -1,5 +1,4 @@
 import { Body, Controller, Get, Global, Injectable, Logger, Module, Param, Put } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import {
   isSystemParamKey,
   SYSTEM_PARAM_KEYS,
@@ -15,6 +14,7 @@ import type { AuthUser } from '../../common/auth/auth-user';
 import { CurrentUser, Public, RequirePermissions } from '../../common/auth/decorators';
 import { AppException } from '../../common/errors/app.exception';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 

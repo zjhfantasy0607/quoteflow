@@ -1,4 +1,4 @@
-import type { User } from '@prisma/client';
+import type { User } from '../src/generated/prisma/client';
 import { Agent, anonymous, loginAs } from './helpers/auth';
 import { resetDb } from './helpers/db';
 import { createUser, seedBase, TEST_PASSWORD } from './helpers/fixtures';

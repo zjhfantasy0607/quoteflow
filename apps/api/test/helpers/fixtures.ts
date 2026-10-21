@@ -1,6 +1,6 @@
-import type { PrismaClient, User, UserStatus, UserType } from '@prisma/client';
 import { hashPassword } from '../../src/common/auth/password';
 import { seedDicts, seedRoles } from '../../prisma/seed-data/base';
+import type { PrismaClient, User, UserStatus, UserType } from '../../src/generated/prisma/client';
 
 export const TEST_PASSWORD = 'Passw0rd!';
 

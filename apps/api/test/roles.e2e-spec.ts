@@ -1,6 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
-import type { User } from '@prisma/client';
 import { RequirePermissions } from '../src/common/auth/decorators';
+import type { User } from '../src/generated/prisma/client';
 import { Agent, loginAs } from './helpers/auth';
 import { resetDb } from './helpers/db';
 import { createUser, seedBase } from './helpers/fixtures';

@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { createTransport, type Transporter } from 'nodemailer';
 import { ClockService } from '../../common/clock/clock.service';
 import { AppConfig } from '../../config/app-config';
+import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ParamsService } from '../params/params.service';
 import { layout, type MailLang, type MailLanguage, type RenderedMail } from './mail-layout';

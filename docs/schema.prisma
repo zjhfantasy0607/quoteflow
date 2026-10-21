@@ -2,13 +2,17 @@
 // Prisma 6.19.x + PostgreSQL 16。所有时间字段为 timestamptz，存 UTC。
 // 金额：单价 Decimal(18,4)，合计 Decimal(18,2)。禁止用 Float 存金额。
 
+// Prisma 7：客户端生成到 src/generated/prisma（不提交），连接串在 prisma.config.ts，运行时经 @prisma/adapter-pg 连接
 generator client {
-  provider = "prisma-client-js"
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+  // 生成代码内部导入不带 .js 后缀，jest 才能直接解析到 .ts
+  importFileExtension = ""
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ============================================================

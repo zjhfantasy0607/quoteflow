@@ -1,7 +1,7 @@
 // 基础数据定义（docs/06-种子数据.md §2），db:seed 与 e2e 测试共用。
 // 只新增缺失的数据，不覆盖管理员已经修改过的内容。
-import type { PrismaClient } from '@prisma/client';
 import { PRESET_ROLES } from '@quoteflow/shared';
+import type { PrismaClient } from '../../src/generated/prisma/client';
 
 export const DEV_PASSWORD = 'Passw0rd!';
 

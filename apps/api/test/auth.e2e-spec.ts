@@ -1,7 +1,7 @@
-import type { User } from '@prisma/client';
 import request from 'supertest';
 import { hashToken } from '../src/common/auth/session.service';
 import { LoginRateLimiter } from '../src/common/auth/login-rate-limiter';
+import type { User } from '../src/generated/prisma/client';
 import { anonymous, loginAs } from './helpers/auth';
 import { resetDb } from './helpers/db';
 import { createUser, seedBase, TEST_PASSWORD } from './helpers/fixtures';

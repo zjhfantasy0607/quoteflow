@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
+import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ClockService } from '../clock/clock.service';
 import { AppException } from '../errors/app.exception';

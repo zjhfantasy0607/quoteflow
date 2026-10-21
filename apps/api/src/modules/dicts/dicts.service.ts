@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { DictItem, Prisma } from '@prisma/client';
 import type {
   CreateDictItemInput,
   CreateDictTypeInput,
@@ -12,6 +11,7 @@ import type {
 import type { AuthUser } from '../../common/auth/auth-user';
 import { AppException } from '../../common/errors/app.exception';
 import { isUniqueViolation } from '../../common/errors/prisma-errors';
+import { DictItem, Prisma } from '../../generated/prisma/client';
 import { AuditService } from '../../infra/audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
