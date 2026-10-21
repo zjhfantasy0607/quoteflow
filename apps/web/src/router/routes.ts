@@ -37,6 +37,50 @@ export const buyerRoute: RouteRecordRaw = {
         menu: { icon: 'Lock', order: 901, groupKey: 'nav.system', groupIcon: 'Setting' },
       },
     },
+    {
+      path: 'system/dicts',
+      name: 'system-dicts',
+      component: () => import('@/views/system/DictsPage.vue'),
+      meta: {
+        titleKey: 'nav.dicts',
+        userType: 'INTERNAL',
+        perm: 'system:dict:view',
+        menu: { icon: 'Collection', order: 902, groupKey: 'nav.system', groupIcon: 'Setting' },
+      },
+    },
+    {
+      path: 'system/params',
+      name: 'system-params',
+      component: () => import('@/views/system/ParamsPage.vue'),
+      meta: {
+        titleKey: 'nav.params',
+        userType: 'INTERNAL',
+        perm: 'system:param:manage',
+        menu: { icon: 'Tools', order: 903, groupKey: 'nav.system', groupIcon: 'Setting' },
+      },
+    },
+    {
+      path: 'system/emails',
+      name: 'system-emails',
+      component: () => import('@/views/system/EmailsPage.vue'),
+      meta: {
+        titleKey: 'nav.emails',
+        userType: 'INTERNAL',
+        perm: 'system:email:view',
+        menu: { icon: 'Message', order: 905, groupKey: 'nav.system', groupIcon: 'Setting' },
+      },
+    },
+    {
+      path: 'system/audit',
+      name: 'system-audit',
+      component: () => import('@/views/system/AuditPage.vue'),
+      meta: {
+        titleKey: 'nav.audit',
+        userType: 'INTERNAL',
+        perm: 'system:audit:view',
+        menu: { icon: 'Document', order: 906, groupKey: 'nav.system', groupIcon: 'Setting' },
+      },
+    },
   ],
 };
 
@@ -66,6 +110,30 @@ export const routes: RouteRecordRaw[] = [
         name: 'login',
         component: () => import('@/views/auth/LoginPage.vue'),
         meta: { titleKey: 'nav.login', userType: 'PUBLIC' },
+      },
+    ],
+  },
+  {
+    path: '/forgot-password',
+    component: BlankLayout,
+    children: [
+      {
+        path: '',
+        name: 'forgot-password',
+        component: () => import('@/views/auth/ForgotPasswordPage.vue'),
+        meta: { titleKey: 'nav.forgotPassword', userType: 'PUBLIC' },
+      },
+    ],
+  },
+  {
+    path: '/reset-password',
+    component: BlankLayout,
+    children: [
+      {
+        path: '',
+        name: 'reset-password',
+        component: () => import('@/views/auth/ResetPasswordPage.vue'),
+        meta: { titleKey: 'nav.resetPassword', userType: 'PUBLIC' },
       },
     ],
   },

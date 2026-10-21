@@ -3,10 +3,12 @@ import auth from './auth';
 import common from './common';
 import enums from './enums';
 import errors from './errors';
+import excel from './excel';
+import file from './file';
 import nav from './nav';
 import system from './system';
 import workbench from './workbench';
 
-const enUS: LocaleMessages = { common, nav, auth, workbench, system, enums, errors };
+const enUS: LocaleMessages = { common, nav, auth, workbench, system, file, excel, enums, errors };
 
 export default enUS;

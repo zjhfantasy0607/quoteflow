@@ -1,5 +1,3 @@
-import type { SystemParamValue, UploadKind } from '@quoteflow/shared';
-
 type Detected = 'pdf' | 'png' | 'jpeg' | 'webp' | 'zip' | 'ole';
 
 interface TypeInfo {
@@ -19,23 +17,6 @@ const EXTENSIONS: Record<string, TypeInfo> = {
   zip: { detected: 'zip', mime: 'application/zip' },
   xls: { detected: 'ole', mime: 'application/vnd.ms-excel' },
   doc: { detected: 'ole', mime: 'application/msword' },
-};
-
-const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp'];
-
-/** 各类文件允许的扩展名与大小上限（R02-4） */
-export const KIND_RULES: Record<
-  UploadKind,
-  { exts: string[]; maxMB: (limits: SystemParamValue<'upload.limits'>) => number }
-> = {
-  SPEC_DOC: { exts: ['pdf', 'xlsx', 'xls', ...IMAGE_EXTS], maxMB: (l) => l.specDocMaxMB },
-  PRODUCT_IMAGE: { exts: IMAGE_EXTS, maxMB: (l) => l.imageMaxMB },
-  MATERIAL_IMAGE: { exts: IMAGE_EXTS, maxMB: (l) => l.imageMaxMB },
-  ATTACHMENT: {
-    exts: ['pdf', 'xlsx', 'xls', 'docx', 'doc', 'zip', ...IMAGE_EXTS],
-    maxMB: (l) => l.attachmentMaxMB,
-  },
-  IMPORT: { exts: ['xlsx'], maxMB: () => 10 },
 };
 
 export function detectMagic(buf: Buffer): Detected | null {

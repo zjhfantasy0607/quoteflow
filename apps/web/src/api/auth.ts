@@ -7,4 +7,8 @@ export const authApi = {
   me: () => get<MeDto>('/auth/me', undefined, { silent: true, skipAuthRedirect: true }),
   updateLocale: (locale: Locale) => put<MeDto>('/auth/me/locale', { locale }),
   changePassword: (body: ChangePasswordInput) => put<{ ok: true }>('/auth/me/password', body, { silent: true }),
+  forgotPassword: (email: string) =>
+    post<{ ok: true }>('/auth/forgot-password', { email }, { silent: true, skipAuthRedirect: true }),
+  resetPassword: (token: string, newPassword: string) =>
+    post<{ ok: true }>('/auth/reset-password', { token, newPassword }, { silent: true, skipAuthRedirect: true }),
 };

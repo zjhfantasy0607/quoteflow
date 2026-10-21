@@ -8,6 +8,7 @@ const auth: LocaleMessages['auth'] = {
     password: 'Password',
     submit: 'Sign in',
     supplierHint: 'Suppliers sign in with the email address registered for their portal account',
+    forgot: 'Forgot password?',
   },
   menu: { changePassword: 'Change password', logout: 'Sign out' },
   changePassword: {
@@ -18,6 +19,23 @@ const auth: LocaleMessages['auth'] = {
     rule: 'At least 8 characters, with both letters and digits',
     mismatch: 'The new passwords do not match',
     success: 'Password changed. Sessions on other devices have been signed out.',
+  },
+  forgot: {
+    title: 'Forgot password',
+    subtitle: 'Enter the email address registered for your account and we will send you a reset link',
+    email: 'Email',
+    submit: 'Send reset email',
+    sent: 'If this email address is registered, you will receive a password reset email within a few minutes. The link is valid for 1 hour and can be used only once.',
+    backToLogin: 'Back to sign in',
+  },
+  reset: {
+    title: 'Reset password',
+    subtitle: 'Set a new password for your account',
+    submit: 'Set new password',
+    success: 'Your password has been reset. Please sign in with the new password.',
+    missingToken: 'The link is incomplete. Open it again from the email, or request a new password reset.',
+    requestAgain: 'Request again',
+    toLogin: 'Go to sign in',
   },
 };
 

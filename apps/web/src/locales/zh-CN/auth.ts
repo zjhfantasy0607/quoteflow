@@ -6,6 +6,7 @@ export default {
     password: '密码',
     submit: '登录',
     supplierHint: '供应商请使用开通门户账号时登记的邮箱登录',
+    forgot: '忘记密码？',
   },
   menu: { changePassword: '修改密码', logout: '退出登录' },
   changePassword: {
@@ -16,5 +17,22 @@ export default {
     rule: '至少 8 位，同时包含字母和数字',
     mismatch: '两次输入的新密码不一致',
     success: '密码已修改，其他设备上的登录已退出',
+  },
+  forgot: {
+    title: '找回密码',
+    subtitle: '输入账号登记的邮箱，我们会发送一封重置密码的邮件',
+    email: '邮箱',
+    submit: '发送重置邮件',
+    sent: '如果这个邮箱已在系统中登记，几分钟内你会收到重置密码的邮件，邮件里的链接 1 小时内有效、只能使用一次。',
+    backToLogin: '返回登录',
+  },
+  reset: {
+    title: '重置密码',
+    subtitle: '为你的账号设置新密码',
+    submit: '设置新密码',
+    success: '密码已重置，请使用新密码登录。',
+    missingToken: '链接不完整，请从邮件里重新打开，或者重新申请重置密码。',
+    requestAgain: '重新申请',
+    toLogin: '去登录',
   },
 };

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { EmailStatus, EmailType } from '../enums';
+import type { SystemParamValue } from '../params';
 import { idSchema, optionalText, pageQuerySchema, requiredText } from './common';
 
 // ---------- 文件 ----------
@@ -7,6 +8,23 @@ import { idSchema, optionalText, pageQuerySchema, requiredText } from './common'
 /** 允许上传的文件类别（EXPORT 只由系统生成） */
 export const UPLOAD_KINDS = ['SPEC_DOC', 'PRODUCT_IMAGE', 'MATERIAL_IMAGE', 'ATTACHMENT', 'IMPORT'] as const;
 export type UploadKind = (typeof UPLOAD_KINDS)[number];
+
+const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp'];
+
+/** 各类上传文件允许的扩展名与大小上限（R02-4；前端上传前预检，后端再校验魔数） */
+export const UPLOAD_KIND_RULES: Record<
+  UploadKind,
+  { exts: string[]; maxMB: (limits: SystemParamValue<'upload.limits'>) => number }
+> = {
+  SPEC_DOC: { exts: ['pdf', 'xlsx', 'xls', ...IMAGE_EXTS], maxMB: (l) => l.specDocMaxMB },
+  PRODUCT_IMAGE: { exts: IMAGE_EXTS, maxMB: (l) => l.imageMaxMB },
+  MATERIAL_IMAGE: { exts: IMAGE_EXTS, maxMB: (l) => l.imageMaxMB },
+  ATTACHMENT: {
+    exts: ['pdf', 'xlsx', 'xls', 'docx', 'doc', 'zip', ...IMAGE_EXTS],
+    maxMB: (l) => l.attachmentMaxMB,
+  },
+  IMPORT: { exts: ['xlsx'], maxMB: () => 10 },
+};
 
 export const uploadFileSchema = z.object({ kind: z.enum(UPLOAD_KINDS) });
 export type UploadFileInput = z.infer<typeof uploadFileSchema>;

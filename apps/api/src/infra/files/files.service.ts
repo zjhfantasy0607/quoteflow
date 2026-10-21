@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { FileDto, FileKind, SheetPreviewDto, UploadKind } from '@quoteflow/shared';
+import { UPLOAD_KIND_RULES, type FileDto, type FileKind, type SheetPreviewDto, type UploadKind } from '@quoteflow/shared';
 import { Workbook } from 'exceljs';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
@@ -11,7 +11,7 @@ import type { FileObject } from '../../generated/prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ParamsService } from '../params/params.service';
 import { FileAccessRegistry, type FileAccessDecision } from './file-access.registry';
-import { extensionOf, fixUploadName, KIND_RULES, resolveMime } from './file-types';
+import { extensionOf, fixUploadName, resolveMime } from './file-types';
 import { STORAGE_DRIVER, type StorageDriver } from './storage';
 
 const PREVIEW_MAX_ROWS = 200;
@@ -48,7 +48,7 @@ export class FilesService {
   /** 上传：按类别校验扩展名、魔数、大小，计算 sha256 后落盘（R02-4） */
   async upload(user: AuthUser, file: UploadedFileInput | undefined, kind: UploadKind): Promise<FileDto> {
     if (!file || file.size === 0) throw new AppException('VALIDATION_FAILED', undefined, [{ path: 'file', code: 'required', message: 'File is required' }]);
-    const rule = KIND_RULES[kind];
+    const rule = UPLOAD_KIND_RULES[kind];
     const maxMB = rule.maxMB(await this.params.get('upload.limits'));
     if (file.size > maxMB * 1024 * 1024) throw new AppException('FILE_TOO_LARGE', { maxMB });
 
