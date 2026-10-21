@@ -191,7 +191,7 @@ onMounted(async () => {
       <el-card shadow="never" class="role-detail">
         <el-empty v-if="!showEditor" :description="t('system.roles.empty')" />
         <template v-else>
-          <el-form label-width="100px" :disabled="readonly" class="basic">
+          <el-form label-width="auto" :disabled="readonly" class="basic">
             <el-row :gutter="16">
               <el-col :span="12">
                 <el-form-item :label="t('system.roles.fields.code')" :error="errors.code" required>
