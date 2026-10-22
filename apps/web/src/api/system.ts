@@ -3,6 +3,7 @@ import type {
   AuditListQuery,
   AuditLogDto,
   CreateDictItemInput,
+  CreatePplSetInput,
   CreateDictTypeInput,
   CreateRoleInput,
   CreateUserInput,
@@ -14,6 +15,9 @@ import type {
   EmailListQuery,
   Paginated,
   PermissionCatalogDto,
+  PplActiveVariantsDto,
+  PplSetDto,
+  PplSetSummaryDto,
   RoleDto,
   SystemParamDto,
   UpdateDictItemInput,
@@ -75,4 +79,14 @@ export const emailsApi = {
 
 export const auditApi = {
   list: (query: Partial<AuditListQuery>) => get<Paginated<AuditLogDto>>('/system/audit-logs', query),
+};
+
+export const pplApi = {
+  list: () => get<PplSetSummaryDto[]>('/ppl/sets'),
+  detail: (version: number) => get<PplSetDto>(`/ppl/sets/${version}`),
+  /** 定义校验失败返回 PPL_DEFINITION_INVALID + 逐条问题，由上传对话框展示 */
+  create: (body: CreatePplSetInput) => post<PplSetDto>('/ppl/sets', body, { silent: true }),
+  activate: (version: number) => post<PplSetDto>(`/ppl/sets/${version}/activate`),
+  /** 当前激活版本的主模板与变体（材料分类表单的下拉） */
+  activeVariants: () => get<PplActiveVariantsDto>('/ppl/variants'),
 };

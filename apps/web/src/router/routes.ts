@@ -110,6 +110,17 @@ export const buyerRoute: RouteRecordRaw = {
       },
     },
     {
+      path: 'system/ppl',
+      name: 'system-ppl',
+      component: () => import('@/views/system/PplPage.vue'),
+      meta: {
+        titleKey: 'nav.ppl',
+        userType: 'INTERNAL',
+        perm: 'system:ppl:view',
+        menu: { icon: 'Tickets', order: 904, groupKey: 'nav.system', groupIcon: 'Setting' },
+      },
+    },
+    {
       path: 'system/emails',
       name: 'system-emails',
       component: () => import('@/views/system/EmailsPage.vue'),

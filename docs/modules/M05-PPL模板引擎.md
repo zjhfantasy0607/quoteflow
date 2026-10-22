@@ -41,6 +41,7 @@
 | POST | `/api/ppl/sets/:version/activate` | `system:ppl:manage` | |
 | GET | `/api/ppl/resolve?version=&variant=` | `inquiry:view` | 解析后的列（内部页面用） |
 | GET | `/api/material-categories/:id/ppl-variant` | `material:view` | `{ variantCode \| null, inheritedFrom }` |
+| GET | `/api/ppl/variants` | `material:view` | 当前激活版本的主模板与变体（`{ version, variants: [{ code, nameZh, nameEn, columnCount }] }`），材料分类表单的"PPL 变体"下拉用；M05 实现时补充（维护分类的采购主管没有 `system:ppl:view`） |
 
 ## 5. 测试
 

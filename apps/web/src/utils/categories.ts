@@ -20,3 +20,17 @@ export function categoryPath(
   }
   return path;
 }
+
+/**
+ * R05-6：实际生效的 PPL 变体（与后端 CategoryIndex.pplVariantSource 一致）：自己设置的优先，否则沿上级查找。
+ * own 是表单里当前的值（可能还没保存）；code 为 null = 主模板，from = 继承来源
+ */
+export function effectivePplVariant(
+  byId: ReadonlyMap<string, MaterialCategoryNodeDto>,
+  parentId: string | null | undefined,
+  own: string | null,
+): { code: string | null; from: MaterialCategoryNodeDto | null } {
+  if (own) return { code: own, from: null };
+  const from = categoryPath(byId, parentId).reverse().find((c) => c.pplVariantCode) ?? null;
+  return { code: from?.pplVariantCode ?? null, from };
+}

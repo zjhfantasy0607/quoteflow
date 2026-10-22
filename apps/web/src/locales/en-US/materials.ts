@@ -23,6 +23,7 @@ const materials: LocaleMessages['materials'] = {
       sort: 'Sort order',
       remark: 'Remark',
       status: 'Status',
+      pplVariant: 'PPL variant',
     },
     disable: 'Disable',
     enable: 'Enable',
@@ -38,6 +39,14 @@ const materials: LocaleMessages['materials'] = {
     deleteHint: 'Categories with sub-categories, materials, inquiries or suppliers cannot be deleted, only disabled.',
     deepWarning: 'Keep the category tree within 5 levels.',
     readonlyHint: 'You do not have permission to manage material categories. View only.',
+    pplInherit: 'Not set (inherit from parent)',
+    pplVariantOption: '{name} ({code})',
+    pplEffective: 'In effect: {name}',
+    pplInheritedFrom: ' (inherited from {name})',
+    pplNotSet: ' (not set here or on any parent, so the master template is used)',
+    pplMasterHint:
+      'Choose the master template to stop inheriting the parent variant. Inquiries use the quotation template in effect for their material category.',
+    pplVariantMissing: 'Variant {code} is not in the active template set. Please choose another one.',
   },
   list: {
     title: 'Material Library',

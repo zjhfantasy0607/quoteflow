@@ -3,6 +3,7 @@ import {
   createPplSetSchema,
   resolvePplQuerySchema,
   type CreatePplSetInput,
+  type PplActiveVariantsDto,
   type PplResolvedDto,
   type PplSetDto,
   type PplSetSummaryDto,
@@ -55,6 +56,13 @@ export class PplController {
   @HttpCode(200)
   activate(@CurrentUser() user: AuthUser, @Param('version') version: string): Promise<PplSetDto> {
     return this.ppl.activate(user, parseVersion(version));
+  }
+
+  /** 当前激活版本的主模板与变体：材料分类表单的"PPL 变体"下拉（能看材料分类的人都要用，不要求 system:ppl:view） */
+  @RequirePermissions('material:view')
+  @Get('variants')
+  variants(): Promise<PplActiveVariantsDto> {
+    return this.ppl.activeVariants();
   }
 
   /** 内部页面用的解析后列定义 */

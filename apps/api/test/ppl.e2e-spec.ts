@@ -173,6 +173,20 @@ describe('M05 PPL 模板集', () => {
       await seedMaterialCategories(ctx.prisma);
     });
 
+    it('变体下拉：当前激活版本的主模板与变体，需要 material:view', async () => {
+      const res = (await buyer.get('/api/ppl/variants').expect(200)).body;
+      expect(res.version).toBe((await activeVersions())[0]);
+      expect(res.variants.map((v: { code: string; columnCount: number }) => [v.code, v.columnCount])).toEqual(
+        [
+          ['PPL-MASTER', 70],
+          ['PPL-LED', 67],
+          ['PPL-PERIPH', 66],
+        ],
+      );
+      await approver.get('/api/ppl/variants').expect(403);
+      await portal.get('/api/ppl/variants').expect(403);
+    });
+
     it('R05-6 自己设置的优先，否则沿上级查找（DRV-CC → PER 的 PPL-PERIPH），到根都没有用主模板', async () => {
       expect(await variantOf('DRV-CC')).toEqual({
         variantCode: 'PPL-PERIPH',

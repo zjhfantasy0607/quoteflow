@@ -6,6 +6,7 @@ import {
   resolveColumns,
   validateDefinition,
   type CreatePplSetInput,
+  type PplActiveVariantsDto,
   type PplDefinition,
   type PplResolvedColumn,
   type PplResolvedDto,
@@ -79,6 +80,14 @@ export class PplService {
   async active(client: Client = this.prisma): Promise<{ version: number; definition: PplDefinition } | null> {
     const row = await client.pplTemplateSet.findFirst({ where: { isActive: true } });
     return row ? { version: row.version, definition: definitionOf(row) } : null;
+  }
+
+  /** 当前激活版本的主模板与变体，材料分类表单的"PPL 变体"下拉用 */
+  async activeVariants(): Promise<PplActiveVariantsDto> {
+    const row = await this.prisma.pplTemplateSet.findFirst({ where: { isActive: true } });
+    return row
+      ? { version: row.version, variants: toSummary(row).variants }
+      : { version: null, variants: [] };
   }
 
   /** 按版本号取定义，激活别的版本后已冻结的版本照样能取（R05-2） */

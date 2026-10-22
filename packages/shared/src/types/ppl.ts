@@ -23,6 +23,12 @@ export interface PplSetDto extends PplSetSummaryDto {
   definition: PplDefinition;
 }
 
+/** GET /api/ppl/variants：当前激活版本的主模板与变体（材料分类绑定变体的下拉）；没有激活版本时 version 为 null */
+export interface PplActiveVariantsDto {
+  version: number | null;
+  variants: PplVariantSummaryDto[];
+}
+
 /** GET /api/ppl/resolve */
 export interface PplResolvedDto {
   version: number;

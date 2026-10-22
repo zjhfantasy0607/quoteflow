@@ -1,7 +1,7 @@
 import * as ElementPlusIcons from '@element-plus/icons-vue';
 import type { MaterialCategoryNodeDto, MeDto } from '@quoteflow/shared';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
-import ElementPlus from 'element-plus';
+import ElementPlus, { ElSelect } from 'element-plus';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyLocale, i18n } from '@/i18n';
@@ -29,12 +29,17 @@ const mocks = vi.hoisted(() => {
   const drv = node('PER-DRV', 'PER', '驱动电源', { status: 'DISABLED', effectiveEnabled: false, children: [cc] });
   const tree = [
     node('LED', null, '灯珠', { children: [node('LED-2835', 'LED', '2835 灯珠', { sort: 3 })] }),
-    node('PER', null, '灯外设', { sort: 2, children: [drv] }),
+    node('PER', null, '灯外设', { sort: 2, pplVariantCode: 'PPL-PERIPH', children: [drv] }),
   ];
   return {
     tree,
     create: vi.fn(async (body: { code: string }) => ({ ...node(body.code, 'LED', 'x'), id: 'new-id' })),
-    update: vi.fn(),
+    update: vi.fn(async (id: string) => node(id, null, 'x')),
+    variants: [
+      { code: 'PPL-MASTER', nameZh: 'PPL 主模板', nameEn: 'PPL Master Template', columnCount: 70 },
+      { code: 'PPL-LED', nameZh: '灯珠报价模板', nameEn: 'LED Beads Template', columnCount: 67 },
+      { code: 'PPL-PERIPH', nameZh: '灯外设报价模板', nameEn: 'Lamp Peripherals Template', columnCount: 66 },
+    ],
   };
 });
 
@@ -46,6 +51,10 @@ vi.mock('@/api/materials', () => ({
     setStatus: vi.fn(),
     remove: vi.fn(),
   },
+}));
+
+vi.mock('@/api/system', () => ({
+  pplApi: { activeVariants: async () => ({ version: 1, variants: mocks.variants }) },
 }));
 
 function me(permissions: string[]): MeDto {
@@ -90,12 +99,13 @@ function button(w: VueWrapper, text: string) {
   return w.findAll('button').find((b) => b.text() === text);
 }
 
-const tr = (key: string) => i18n.global.t(key);
+const tr = (key: string, params: Record<string, unknown> = {}) => i18n.global.t(key, params);
 
 describe('材料分类页', () => {
   beforeEach(() => {
     applyLocale('zh-CN');
     mocks.create.mockClear();
+    mocks.update.mockClear();
   });
 
   it('预置分类树完整显示，默认选中第一个分类', async () => {
@@ -151,6 +161,30 @@ describe('材料分类页', () => {
     expect(mocks.create).toHaveBeenCalledWith(
       expect.objectContaining({ parentId: 'LED', code: 'LED-3528', nameZh: '3528 灯珠', nameEn: '3528 SMD LED', sort: 4 }),
     );
+    w.unmount();
+  });
+
+  it('R05-6 PPL 变体：显示实际生效的变体与继承来源，改选后立即更新并随保存提交', async () => {
+    const w = await mountPage(['material:view', 'material:category:manage']);
+    const effective = (code: string, name: string) =>
+      tr('materials.categories.pplEffective', { name: tr('materials.categories.pplVariantOption', { name, code }) });
+
+    await clickNode(w, 'DRV-CC');
+    expect(w.text()).toContain(
+      effective('PPL-PERIPH', '灯外设报价模板') + tr('materials.categories.pplInheritedFrom', { name: '灯外设' }),
+    );
+
+    await clickNode(w, 'LED');
+    expect(w.text()).toContain(effective('PPL-MASTER', 'PPL 主模板') + tr('materials.categories.pplNotSet'));
+
+    w.findComponent(ElSelect).vm.$emit('update:modelValue', 'PPL-LED');
+    await flushPromises();
+    expect(w.text()).toContain(effective('PPL-LED', '灯珠报价模板'));
+    expect(w.text()).not.toContain(tr('materials.categories.pplNotSet'));
+
+    await button(w, tr('common.actions.save'))!.trigger('click');
+    await flushPromises();
+    expect(mocks.update).toHaveBeenCalledWith('LED', expect.objectContaining({ pplVariantCode: 'PPL-LED' }));
     w.unmount();
   });
 });

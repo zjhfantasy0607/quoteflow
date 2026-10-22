@@ -14,6 +14,7 @@ export default {
   roles: '角色权限',
   dicts: '数据字典',
   params: '系统参数',
+  ppl: 'PPL 模板',
   emails: '邮件记录',
   audit: '操作日志',
   forgotPassword: '找回密码',

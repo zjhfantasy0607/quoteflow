@@ -16,6 +16,7 @@ const nav: LocaleMessages['nav'] = {
   roles: 'Roles & Permissions',
   dicts: 'Dictionaries',
   params: 'System Parameters',
+  ppl: 'PPL Templates',
   emails: 'Email Log',
   audit: 'Audit Log',
   forgotPassword: 'Forgot password',

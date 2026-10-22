@@ -1,15 +1,22 @@
 <script setup lang="ts">
-import { createCategorySchema, updateCategorySchema, type MaterialCategoryNodeDto } from '@quoteflow/shared';
+import {
+  PPL_MASTER_CODE,
+  createCategorySchema,
+  updateCategorySchema,
+  type MaterialCategoryNodeDto,
+  type PplVariantSummaryDto,
+} from '@quoteflow/shared';
 import { ElMessage, type TreeInstance } from 'element-plus';
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { apiError, translateError } from '@/api/http';
 import { materialCategoriesApi } from '@/api/materials';
+import { pplApi } from '@/api/system';
 import PageHeader from '@/components/PageHeader.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useCategoryStore } from '@/stores/categories';
-import { categoryMatches, categoryPath } from '@/utils/categories';
+import { categoryMatches, categoryPath, effectivePplVariant } from '@/utils/categories';
 import { confirmAction } from '@/utils/dialogs';
 import { pickName } from '@/utils/format';
 import { serverFieldErrors, zodErrors, type FieldErrors } from '@/utils/validate';
@@ -29,7 +36,9 @@ const selectedId = ref<string | null>(null);
 const creatingUnder = ref<string | null | undefined>(undefined);
 const saving = ref(false);
 const errors = ref<FieldErrors>({});
-const form = reactive({ code: '', nameZh: '', nameEn: '', sort: 0, remark: '' });
+const form = reactive({ code: '', nameZh: '', nameEn: '', sort: 0, remark: '', pplVariantCode: '' });
+/** 当前激活模板集的主模板与变体（下拉选项） */
+const variants = ref<PplVariantSummaryDto[]>([]);
 
 const creating = computed(() => creatingUnder.value !== undefined);
 const selected = computed(() => (selectedId.value ? (store.byId.get(selectedId.value) ?? null) : null));
@@ -38,6 +47,36 @@ const parentLabel = computed(() => {
   const parentId = creating.value ? creatingUnder.value : selected.value?.parentId;
   const path = categoryPath(store.byId, parentId);
   return path.length > 0 ? path.map((c) => pickName(c, locale.value)).join(' > ') : t('materials.categories.topLevel');
+});
+const variantName = (code: string) => {
+  const v = variants.value.find((x) => x.code === code);
+  return v ? t('materials.categories.pplVariantOption', { name: pickName(v, locale.value), code }) : code;
+};
+const variantOptions = computed(() => {
+  const options = variants.value.map((v) => ({ value: v.code, label: variantName(v.code) }));
+  // 绑定的变体不在激活版本里时也要能显示出来
+  if (form.pplVariantCode && !options.some((o) => o.value === form.pplVariantCode)) {
+    options.push({ value: form.pplVariantCode, label: form.pplVariantCode });
+  }
+  return options;
+});
+/** R05-6：按表单里的值（未保存也算）和上级的设置算出实际生效的变体 */
+const effectiveVariant = computed(() =>
+  effectivePplVariant(
+    store.byId,
+    creating.value ? creatingUnder.value : selected.value?.parentId,
+    form.pplVariantCode || null,
+  ),
+);
+const effectiveVariantText = computed(() => {
+  const { code, from } = effectiveVariant.value;
+  const text = t('materials.categories.pplEffective', { name: variantName(code ?? PPL_MASTER_CODE) });
+  if (from) return text + t('materials.categories.pplInheritedFrom', { name: pickName(from, locale.value) });
+  return code ? text : text + t('materials.categories.pplNotSet');
+});
+const variantMissing = computed(() => {
+  const code = effectiveVariant.value.code;
+  return code !== null && variants.value.length > 0 && !variants.value.some((v) => v.code === code);
 });
 const tooDeep = computed(
   () => creating.value && categoryPath(store.byId, creatingUnder.value).length + 1 > SUGGESTED_MAX_DEPTH,
@@ -51,6 +90,7 @@ function fill(node: MaterialCategoryNodeDto | null): void {
     nameEn: node?.nameEn ?? '',
     sort: node?.sort ?? 0,
     remark: node?.remark ?? '',
+    pplVariantCode: node?.pplVariantCode ?? '',
   });
 }
 
@@ -84,7 +124,13 @@ async function reload(id: string | null): Promise<void> {
 }
 
 async function save(): Promise<void> {
-  const base = { nameZh: form.nameZh, nameEn: form.nameEn, sort: form.sort, remark: form.remark };
+  const base = {
+    nameZh: form.nameZh,
+    nameEn: form.nameEn,
+    sort: form.sort,
+    remark: form.remark,
+    pplVariantCode: form.pplVariantCode || null,
+  };
   const data = creating.value ? { ...base, code: form.code, parentId: creatingUnder.value ?? null } : base;
   errors.value = zodErrors(creating.value ? createCategorySchema : updateCategorySchema, data);
   if (Object.keys(errors.value).length > 0) return;
@@ -100,6 +146,7 @@ async function save(): Promise<void> {
   } catch (err) {
     const body = apiError(err);
     if (body?.code === 'CATEGORY_CODE_TAKEN') errors.value = { code: translateError(body) };
+    else if (body?.code === 'PPL_VARIANT_NOT_FOUND') errors.value = { pplVariantCode: translateError(body) };
     else if (body?.code === 'VALIDATION_FAILED') errors.value = serverFieldErrors(body.details);
     else ElMessage.error(translateError(body));
   } finally {
@@ -143,7 +190,18 @@ function filterNode(value: string, data: Record<string, unknown>): boolean {
 
 watch(keyword, (k) => treeRef.value?.filter(k));
 
-onMounted(() => reload(null));
+async function loadVariants(): Promise<void> {
+  try {
+    variants.value = (await pplApi.activeVariants()).variants;
+  } catch {
+    variants.value = []; // 错误提示由 http 拦截器显示，下拉只剩已绑定的值
+  }
+}
+
+onMounted(() => {
+  void loadVariants();
+  return reload(null);
+});
 </script>
 
 <template>
@@ -257,6 +315,21 @@ onMounted(() => reload(null));
             <el-form-item :label="t('materials.categories.fields.sort')" :error="errors.sort">
               <el-input-number v-model="form.sort" :min="0" :max="9999" controls-position="right" />
             </el-form-item>
+            <el-form-item :label="t('materials.categories.fields.pplVariant')" :error="errors.pplVariantCode">
+              <el-select
+                v-model="form.pplVariantCode"
+                class="variant-select"
+                clearable
+                :placeholder="t('materials.categories.pplInherit')"
+              >
+                <el-option v-for="o in variantOptions" :key="o.value" :value="o.value" :label="o.label" />
+              </el-select>
+              <div class="variant-effective">{{ effectiveVariantText }}</div>
+              <div v-if="variantMissing" class="variant-missing">
+                {{ t('materials.categories.pplVariantMissing', { code: effectiveVariant.code }) }}
+              </div>
+              <div class="variant-hint">{{ t('materials.categories.pplMasterHint') }}</div>
+            </el-form-item>
             <el-form-item :label="t('materials.categories.fields.remark')" :error="errors.remark">
               <el-input v-model="form.remark" type="textarea" :rows="3" maxlength="1000" show-word-limit />
             </el-form-item>
@@ -344,6 +417,26 @@ onMounted(() => reload(null));
 }
 .editor-form {
   max-width: 640px;
+}
+.variant-select {
+  width: 100%;
+}
+.variant-effective,
+.variant-missing,
+.variant-hint {
+  width: 100%;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.variant-effective {
+  margin-top: 4px;
+  color: var(--el-text-color-regular);
+}
+.variant-missing {
+  color: var(--el-color-danger);
+}
+.variant-hint {
+  color: var(--el-text-color-secondary);
 }
 .meta {
   margin: 0 0 8px;
