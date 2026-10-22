@@ -145,6 +145,7 @@ const system: LocaleMessages['system'] = {
     activateConfirm:
       'Activate v{version}? Inquiry rounds published from now on will use this version. Rounds already published are not affected.',
     activated: 'v{version} activated',
+    viewing: 'Viewing',
     variant: 'Template',
     variantOption: '{name} ({count} columns)',
     columnSummary:

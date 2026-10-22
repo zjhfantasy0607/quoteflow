@@ -127,6 +127,21 @@ describe('PPL 模板页', () => {
     w.unmount();
   });
 
+  it('正在查看的版本显示"正在查看"而不是按钮；点别的版本的"查看"切换详情', async () => {
+    const w = await mountPage(['system:ppl:view']);
+    const viewingRow = () => w.find('.sets-table .viewing').element.closest('tr')?.textContent ?? '';
+    expect(viewingRow()).toContain('v1');
+    const view = buttons(tr('common.actions.view'));
+    expect(view).toHaveLength(1);
+    view[0].click();
+    await flushPromises();
+    expect(mocks.detail).toHaveBeenLastCalledWith(2);
+    expect(w.find('.detail-title').text()).toContain('v2');
+    expect(viewingRow()).toContain('v2');
+    expect(buttons(tr('common.actions.view'))).toHaveLength(1);
+    w.unmount();
+  });
+
   it('只有 system:ppl:view 时没有上传和激活按钮', async () => {
     const w = await mountPage(['system:ppl:view']);
     expect(buttons(tr('system.ppl.upload'))).toHaveLength(0);

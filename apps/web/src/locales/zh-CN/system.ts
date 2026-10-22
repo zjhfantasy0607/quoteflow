@@ -134,6 +134,7 @@ export default {
     activate: '激活',
     activateConfirm: '激活 v{version} 吗？之后发布的询价轮次使用这个版本，已发布的轮次不受影响。',
     activated: '已激活 v{version}',
+    viewing: '正在查看',
     variant: '模板',
     variantOption: '{name}（{count} 列）',
     columnSummary: '共 {total} 列：预填 {prefill}、供应商填写 {supplier}（必填 {required}）、公式 {formula}',

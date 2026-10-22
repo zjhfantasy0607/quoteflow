@@ -8,7 +8,7 @@ import {
   type PplSetSummaryDto,
 } from '@quoteflow/shared';
 import { ElMessage } from 'element-plus';
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, type ComponentPublicInstance } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { pplApi } from '@/api/system';
 import PageHeader from '@/components/PageHeader.vue';
@@ -28,6 +28,7 @@ const loading = ref(false);
 const detail = ref<PplSetDto | null>(null);
 const variantCode = ref<string>(PPL_MASTER_CODE);
 const uploading = ref(false);
+const detailCard = ref<ComponentPublicInstance | null>(null);
 
 /** 当前查看的模板实际使用的列（与报价填报、Excel 用同一个 resolveColumns，R05-3） */
 const columns = computed<PplResolvedColumn[]>(() =>
@@ -55,6 +56,13 @@ const variantLabel = (v: { code: string; nameZh: string; nameEn: string }) =>
 async function open(version: number): Promise<void> {
   detail.value = await pplApi.detail(version);
   if (!detail.value.variants.some((v) => v.code === variantCode.value)) variantCode.value = PPL_MASTER_CODE;
+}
+
+/** 点"查看"或行：切换到该版本（已在查看时不重新加载），并滚动到详情，让用户看到结果 */
+async function view(version: number): Promise<void> {
+  if (version !== detail.value?.version) await open(version);
+  await nextTick();
+  (detailCard.value?.$el as HTMLElement | undefined)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
 }
 
 /** 刷新列表，并打开指定版本（默认保持当前查看的版本，没有时打开激活版本） */
@@ -149,7 +157,7 @@ onMounted(() => load());
         :data="sets"
         :empty-text="t('system.ppl.noData')"
         :row-class-name="rowClass"
-        @row-click="(row: PplSetSummaryDto) => open(row.version)"
+        @row-click="(row: PplSetSummaryDto) => view(row.version)"
       >
         <el-table-column :label="t('system.ppl.fields.version')" width="90">
           <template #default="{ row }">{{ t('system.ppl.versionNo', { version: row.version }) }}</template>
@@ -180,7 +188,8 @@ onMounted(() => load());
         </el-table-column>
         <el-table-column :label="t('common.table.actions')" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click.stop="open(row.version)">{{
+            <span v-if="row.version === detail?.version" class="viewing">{{ t('system.ppl.viewing') }}</span>
+            <el-button v-else link type="primary" @click.stop="view(row.version)">{{
               t('common.actions.view')
             }}</el-button>
             <el-button v-if="canManage && !row.isActive" link type="primary" @click.stop="activate(row)">
@@ -191,7 +200,7 @@ onMounted(() => load());
       </el-table>
     </el-card>
 
-    <el-card v-if="detail" shadow="never" class="qf-card detail">
+    <el-card v-if="detail" ref="detailCard" shadow="never" class="qf-card detail">
       <template #header>
         <div class="detail-header">
           <span class="detail-title"
@@ -315,6 +324,11 @@ onMounted(() => load());
 }
 .required {
   color: var(--el-color-danger);
+}
+.viewing {
+  margin-right: 12px;
+  color: var(--el-text-color-secondary);
+  font-size: 14px;
 }
 .flag {
   margin: 2px 4px 2px 0;
