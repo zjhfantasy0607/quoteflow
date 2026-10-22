@@ -131,11 +131,11 @@ describe('M03 材料分类', () => {
     it('PPL 变体：接口接受 pplVariantCode，不传时不修改，传空或 null 时清除', async () => {
       const set = await admin
         .put(`/api/material-categories/${top.id}`)
-        .send({ nameZh: '测试 A2', nameEn: 'Test A2', pplVariantCode: 'ppl-test' })
+        .send({ nameZh: '测试 A2', nameEn: 'Test A2', pplVariantCode: 'ppl-led' })
         .expect(200);
-      expect(set.body.pplVariantCode).toBe('PPL-TEST');
+      expect(set.body.pplVariantCode).toBe('PPL-LED');
       const keep = await admin.put(`/api/material-categories/${top.id}`).send({ nameZh: '测试 A2', nameEn: 'Test A2' }).expect(200);
-      expect(keep.body.pplVariantCode).toBe('PPL-TEST');
+      expect(keep.body.pplVariantCode).toBe('PPL-LED');
       const clear = await admin
         .put(`/api/material-categories/${top.id}`)
         .send({ nameZh: '测试 A2', nameEn: 'Test A2', pplVariantCode: null })

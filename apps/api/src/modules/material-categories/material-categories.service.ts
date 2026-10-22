@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import type {
-  CreateCategoryInput,
-  EnableStatusInput,
-  MaterialCategoryDto,
-  MaterialCategoryNodeDto,
-  UpdateCategoryInput,
+import {
+  hasPplVariant,
+  type CreateCategoryInput,
+  type EnableStatusInput,
+  type MaterialCategoryDto,
+  type MaterialCategoryNodeDto,
+  type MaterialCategoryPplVariantDto,
+  type UpdateCategoryInput,
 } from '@quoteflow/shared';
 import type { AuthUser } from '../../common/auth/auth-user';
 import { changedFields } from '../../common/audit-diff';
@@ -13,6 +15,7 @@ import { isForeignKeyViolation, isUniqueViolation } from '../../common/errors/pr
 import { MaterialCategory, Prisma } from '../../generated/prisma/client';
 import { AuditService } from '../../infra/audit/audit.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PplService } from '../ppl/ppl.service';
 
 type Client = PrismaService | Prisma.TransactionClient;
 
@@ -53,7 +56,9 @@ export class CategoryIndex {
     if (cached !== undefined) return cached;
     const row = this.byId.get(id);
     const result =
-      row !== undefined && row.status === 'ENABLED' && (row.parentId === null || this.isEffectiveEnabled(row.parentId));
+      row !== undefined &&
+      row.status === 'ENABLED' &&
+      (row.parentId === null || this.isEffectiveEnabled(row.parentId));
     this.effective.set(id, result);
     return result;
   }
@@ -65,10 +70,22 @@ export class CategoryIndex {
   assertSelectable(id: string, path = 'categoryId'): MaterialCategory {
     const category = this.byId.get(id);
     if (!category) {
-      throw new AppException('VALIDATION_FAILED', undefined, [{ path, code: 'not_found', message: 'Category not found' }]);
+      throw new AppException('VALIDATION_FAILED', undefined, [
+        { path, code: 'not_found', message: 'Category not found' },
+      ]);
     }
     if (!this.isEffectiveEnabled(id)) throw new AppException('CATEGORY_DISABLED', { code: category.code });
     return category;
+  }
+
+  /** R05-6：自己设置了变体就用自己的，否则沿上级查找；到根都没有返回 null（主模板） */
+  pplVariantSource(id: string): MaterialCategory | null {
+    let current = this.byId.get(id);
+    while (current) {
+      if (current.pplVariantCode) return current;
+      current = current.parentId === null ? undefined : this.byId.get(current.parentId);
+    }
+    return null;
   }
 
   /** 自己和全部下级的 id（R03-6） */
@@ -85,7 +102,11 @@ export class CategoryIndex {
   }
 }
 
-export function toCategoryDto(c: MaterialCategory, index: CategoryIndex, materialCount: number): MaterialCategoryDto {
+export function toCategoryDto(
+  c: MaterialCategory,
+  index: CategoryIndex,
+  materialCount: number,
+): MaterialCategoryDto {
   return {
     id: c.id,
     parentId: c.parentId,
@@ -107,6 +128,7 @@ export class MaterialCategoriesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly ppl: PplService,
   ) {}
 
   async loadIndex(client: Client = this.prisma): Promise<CategoryIndex> {
@@ -128,8 +150,35 @@ export class MaterialCategoriesService {
    * 新选用分类前校验（材料、M04 供应商主营分类、M06 询价行）：存在且有效启用，
    * 否则 VALIDATION_FAILED / CATEGORY_DISABLED（R03-2）
    */
-  async assertSelectable(id: string, client: Client = this.prisma, path = 'categoryId'): Promise<MaterialCategory> {
+  async assertSelectable(
+    id: string,
+    client: Client = this.prisma,
+    path = 'categoryId',
+  ): Promise<MaterialCategory> {
     return (await this.loadIndex(client)).assertSelectable(id, path);
+  }
+
+  /** R05-6；M07 发布时按询价单的材料类别解析变体也用它 */
+  async pplVariant(id: string, client: Client = this.prisma): Promise<MaterialCategoryPplVariantDto> {
+    const index = await this.loadIndex(client);
+    if (!index.get(id)) throw new AppException('NOT_FOUND');
+    const source = index.pplVariantSource(id);
+    return {
+      variantCode: source?.pplVariantCode ?? null,
+      inheritedFrom:
+        source && source.id !== id
+          ? { id: source.id, code: source.code, nameZh: source.nameZh, nameEn: source.nameEn }
+          : null,
+    };
+  }
+
+  /** M05 §2.3：新绑定的变体必须存在于当前激活模板集；PPL-MASTER 表示明确用主模板、不继承上级（B-12） */
+  private async assertVariantBindable(code: string | null | undefined, client: Client): Promise<void> {
+    if (!code) return;
+    const active = await this.ppl.active(client);
+    if (!active || !hasPplVariant(active.definition, code)) {
+      throw new AppException('PPL_VARIANT_NOT_FOUND', { variantCode: code });
+    }
   }
 
   /** R03-1：code 唯一、创建后不可改；上级必须有效启用 */
@@ -138,6 +187,7 @@ export class MaterialCategoriesService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         if (parentId) await this.assertSelectable(parentId, tx, 'parentId');
+        await this.assertVariantBindable(input.pplVariantCode, tx);
         const created = await tx.materialCategory.create({
           data: {
             parentId,
@@ -178,6 +228,9 @@ export class MaterialCategoriesService {
       ...(input.pplVariantCode !== undefined ? { pplVariantCode: input.pplVariantCode } : {}),
     };
     return this.prisma.$transaction(async (tx) => {
+      // 只在改动时校验，激活的新版本去掉了某个变体时，已绑定它的分类仍能改名
+      if (input.pplVariantCode !== before.pplVariantCode)
+        await this.assertVariantBindable(input.pplVariantCode, tx);
       await tx.materialCategory.update({ where: { id }, data });
       await this.audit.log(
         {
@@ -220,7 +273,15 @@ export class MaterialCategoriesService {
         const category = await tx.materialCategory.findUnique({
           where: { id },
           include: {
-            _count: { select: { children: true, materials: true, inquiries: true, inquiryLines: true, suppliers: true } },
+            _count: {
+              select: {
+                children: true,
+                materials: true,
+                inquiries: true,
+                inquiryLines: true,
+                suppliers: true,
+              },
+            },
           },
         });
         if (!category) throw new AppException('NOT_FOUND');

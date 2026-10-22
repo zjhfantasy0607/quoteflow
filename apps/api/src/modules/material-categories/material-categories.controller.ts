@@ -9,11 +9,13 @@ import {
   type EnableStatusInput,
   type MaterialCategoryDto,
   type MaterialCategoryNodeDto,
+  type MaterialCategoryPplVariantDto,
   type UpdateCategoryInput,
 } from '@quoteflow/shared';
 import type { AuthUser } from '../../common/auth/auth-user';
 import { CurrentUser, RequirePermissions } from '../../common/auth/decorators';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import { PplModule } from '../ppl/ppl.controller';
 import { MaterialCategoriesService } from './material-categories.service';
 
 @Controller('material-categories')
@@ -30,6 +32,13 @@ export class MaterialCategoriesController {
     @Query(new ZodValidationPipe(categoryTreeQuerySchema)) query: CategoryTreeQuery,
   ): Promise<MaterialCategoryNodeDto[]> {
     return this.categories.tree(query.includeDisabled);
+  }
+
+  /** R05-6 实际生效的 PPL 变体与继承来源 */
+  @RequirePermissions('material:view')
+  @Get(':id/ppl-variant')
+  pplVariant(@Param('id') id: string): Promise<MaterialCategoryPplVariantDto> {
+    return this.categories.pplVariant(id);
   }
 
   @RequirePermissions('material:category:manage')
@@ -72,6 +81,7 @@ export class MaterialCategoriesController {
 
 /** M04 供应商主营分类、M06 询价行导入它，用 assertSelectable / loadIndex */
 @Module({
+  imports: [PplModule],
   controllers: [MaterialCategoriesController],
   providers: [MaterialCategoriesService],
   exports: [MaterialCategoriesService],
