@@ -3,4 +3,5 @@ export * from './formulas';
 export * from './values';
 export * from './validate-definition';
 export * from './resolve';
+export * from './prefill';
 export * from './definitions/v0';

@@ -7,6 +7,7 @@ import {
   PplError,
   applyFormulas,
   buildDraftDefaults,
+  buildPrefillValues,
   cbm,
   exclTax,
   lineTotal,
@@ -379,5 +380,37 @@ describe('validateQuoteValues', () => {
 describe('buildDraftDefaults', () => {
   it('取供应商列的默认值并规范化', () => {
     expect(buildDraftDefaults(resolveColumns(PPL_V0, null))).toEqual({ tax_rate: '13.00' });
+  });
+});
+
+describe('buildPrefillValues', () => {
+  const line = {
+    lineNo: 2,
+    materialCode: 'MAT-000001',
+    nameZh: '灯珠 2835',
+    nameEn: null,
+    categoryNameZh: '2835 灯珠',
+    categoryNameEn: '2835 SMD LED',
+    spec: '2835 / 0.5W',
+    unitNameZh: '个',
+    unitNameEn: 'pcs',
+    quantity: '1000.0000',
+    drawingRef: null,
+    currency: 'CNY',
+  };
+
+  it('名称类按语言取，英文为空回退中文；空值不写入', () => {
+    const cols = resolveColumns(PPL_V0, null);
+    expect(buildPrefillValues(cols, line, 'en-US')).toEqual({
+      line_no: 2,
+      material_code: 'MAT-000001',
+      material_name: '灯珠 2835',
+      category_name: '2835 SMD LED',
+      spec: '2835 / 0.5W',
+      unit: 'pcs',
+      quantity: '1000.0000',
+      currency: 'CNY',
+    });
+    expect(buildPrefillValues(cols, line, 'zh-CN')).toMatchObject({ category_name: '2835 灯珠', unit: '个' });
   });
 });

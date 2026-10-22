@@ -12,6 +12,7 @@ import type { AuthUser } from '../../common/auth/auth-user';
 import { CurrentUser, RequirePermissions } from '../../common/auth/decorators';
 import { AppException } from '../../common/errors/app.exception';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import { PplExcelService } from './ppl-excel.service';
 import { PplService } from './ppl.service';
 
 /** 路径里的版本号不是正整数时按"版本不存在"处理 */
@@ -59,15 +60,17 @@ export class PplController {
   /** 内部页面用的解析后列定义 */
   @RequirePermissions('inquiry:view')
   @Get('resolve')
-  resolve(@Query(new ZodValidationPipe(resolvePplQuerySchema)) query: ResolvePplQuery): Promise<PplResolvedDto> {
+  resolve(
+    @Query(new ZodValidationPipe(resolvePplQuerySchema)) query: ResolvePplQuery,
+  ): Promise<PplResolvedDto> {
     return this.ppl.resolve(query.version, query.variant);
   }
 }
 
-/** M03 分类绑定变体、M07 发布冻结版本、M09 报价都用 PplService */
+/** M03 分类绑定变体、M07 发布冻结版本、M09 报价都用 PplService；M09 的锁定 Excel 下载与导入用 PplExcelService */
 @Module({
   controllers: [PplController],
-  providers: [PplService],
-  exports: [PplService],
+  providers: [PplService, PplExcelService],
+  exports: [PplService, PplExcelService],
 })
 export class PplModule {}

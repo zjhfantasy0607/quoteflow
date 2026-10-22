@@ -42,6 +42,13 @@ const excel: LocaleMessages['excel'] = {
     main_category_not_found: 'Unknown category code {code}',
     main_category_disabled: 'Category {code} is disabled',
     invalid_language: 'Must be 中文, English or 中英 (or zh-CN, en-US, bilingual)',
+    too_large: 'Must be at most {max}',
+    invalid_text: 'Must be text',
+    invalid_date: 'Must be a date (YYYY-MM-DD)',
+    invalid_bool: 'Must be "是 / Yes" or "否 / No"',
+    invalid_option: 'Unknown option {value}',
+    line_mismatch: 'The line number was changed; this row should be line {lineNo}. Please download the template again',
+    unexpected_row: 'Extra row below the quotation lines; please delete it',
   },
 };
 

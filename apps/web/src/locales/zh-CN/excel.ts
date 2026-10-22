@@ -40,5 +40,12 @@ export default {
     main_category_not_found: '没有分类编码 {code}',
     main_category_disabled: '分类 {code} 已停用',
     invalid_language: '只能填写 中文、English、中英（或 zh-CN、en-US、bilingual）',
+    too_large: '不能大于 {max}',
+    invalid_text: '应为文本',
+    invalid_date: '应为日期，格式 YYYY-MM-DD',
+    invalid_bool: '只能填写"是 / Yes"或"否 / No"',
+    invalid_option: '没有选项 {value}',
+    line_mismatch: '行号被改动，这一行应为询价行 {lineNo}，请重新下载模板',
+    unexpected_row: '询价行之外多出的行，请删除',
   },
 };

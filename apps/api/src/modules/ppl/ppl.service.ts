@@ -29,7 +29,10 @@ export function definitionOf(row: PplTemplateSet): PplDefinition {
 }
 
 /** 解析变体的列；shared 抛的 PplError（变体不存在）转成同码的 AppException */
-export function resolveVariantColumns(definition: PplDefinition, variantCode: string | null): PplResolvedColumn[] {
+export function resolveVariantColumns(
+  definition: PplDefinition,
+  variantCode: string | null,
+): PplResolvedColumn[] {
   try {
     return resolveColumns(definition, variantCode);
   } catch (e) {
@@ -45,7 +48,10 @@ function toSummary(row: PplTemplateSet): PplSetSummaryDto {
     label: row.label,
     isActive: row.isActive,
     createdAt: row.createdAt.toISOString(),
-    variants: pplVariants(definition).map((v) => ({ ...v, columnCount: resolveColumns(definition, v.code).length })),
+    variants: pplVariants(definition).map((v) => ({
+      ...v,
+      columnCount: resolveColumns(definition, v.code).length,
+    })),
   };
 }
 

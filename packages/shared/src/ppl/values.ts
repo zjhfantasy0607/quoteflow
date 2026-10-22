@@ -108,7 +108,8 @@ export function normalizePplValue(column: PplColumn, raw: unknown, dict: PplDict
     case 'bool':
       return typeof raw === 'boolean' ? { ok: true, value: raw } : { ok: false, code: 'invalid_bool' };
     case 'enum': {
-      if (typeof raw !== 'string') return { ok: false, code: 'invalid_option' };
+      if (typeof raw !== 'string')
+        return { ok: false, code: 'invalid_option', params: { value: String(raw) } };
       const value = raw.trim();
       if (dict && !(dict[column.dictType ?? ''] ?? []).includes(value)) {
         return { ok: false, code: 'invalid_option', params: { value } };
@@ -117,7 +118,7 @@ export function normalizePplValue(column: PplColumn, raw: unknown, dict: PplDict
     }
     case 'multiEnum': {
       if (!Array.isArray(raw) || raw.some((item) => typeof item !== 'string')) {
-        return { ok: false, code: 'invalid_option' };
+        return { ok: false, code: 'invalid_option', params: { value: String(raw) } };
       }
       const value = [...new Set((raw as string[]).map((item) => item.trim()).filter(Boolean))];
       const options = dict?.[column.dictType ?? ''] ?? [];
@@ -139,7 +140,7 @@ const MESSAGES: Record<PplValueErrorCode, (p: Record<string, string | number>) =
   too_large: (p) => `must be at most ${p.max}`,
   invalid_date: () => 'must be a date (YYYY-MM-DD)',
   invalid_bool: () => 'must be yes or no',
-  invalid_option: (p) => (p.value ? `has an unknown option "${p.value}"` : 'has an invalid option'),
+  invalid_option: (p) => `has an unknown option "${p.value}"`,
 };
 
 export interface ValidateQuoteValuesOptions {
