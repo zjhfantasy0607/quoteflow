@@ -25,6 +25,8 @@ export default {
   confirmTitle: '请确认',
   table: { empty: '暂无数据', total: '共 {total} 条', actions: '操作' },
   masked: '无权查看',
+  /** 并列的多个名称之间的分隔符 */
+  listSeparator: '、',
   saved: '已保存',
   validation: {
     required: '必填',

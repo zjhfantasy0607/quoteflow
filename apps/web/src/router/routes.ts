@@ -16,6 +16,34 @@ export const buyerRoute: RouteRecordRaw = {
       meta: { titleKey: 'nav.workbench', userType: 'INTERNAL', menu: { icon: 'House', order: 0 } },
     },
     {
+      path: 'suppliers',
+      name: 'suppliers',
+      component: () => import('@/views/suppliers/SuppliersPage.vue'),
+      meta: {
+        titleKey: 'nav.suppliers',
+        userType: 'INTERNAL',
+        perm: 'supplier:view',
+        menu: { icon: 'OfficeBuilding', order: 300, groupKey: 'nav.suppliersGroup', groupIcon: 'Shop' },
+      },
+    },
+    {
+      path: 'suppliers/categories',
+      name: 'supplier-categories',
+      component: () => import('@/views/suppliers/SupplierCategoriesPage.vue'),
+      meta: {
+        titleKey: 'nav.supplierCategories',
+        userType: 'INTERNAL',
+        perm: 'supplier:category:manage',
+        menu: { icon: 'PriceTag', order: 301, groupKey: 'nav.suppliersGroup', groupIcon: 'Shop' },
+      },
+    },
+    {
+      path: 'suppliers/:id',
+      name: 'supplier-detail',
+      component: () => import('@/views/suppliers/SupplierDetailPage.vue'),
+      meta: { titleKey: 'nav.supplierDetail', userType: 'INTERNAL', perm: 'supplier:view' },
+    },
+    {
       path: 'materials',
       name: 'materials',
       component: () => import('@/views/materials/MaterialsPage.vue'),
@@ -156,6 +184,18 @@ export const routes: RouteRecordRaw[] = [
         name: 'reset-password',
         component: () => import('@/views/auth/ResetPasswordPage.vue'),
         meta: { titleKey: 'nav.resetPassword', userType: 'PUBLIC' },
+      },
+    ],
+  },
+  {
+    path: '/activate',
+    component: BlankLayout,
+    children: [
+      {
+        path: '',
+        name: 'activate',
+        component: () => import('@/views/auth/ActivatePage.vue'),
+        meta: { titleKey: 'nav.activate', userType: 'PUBLIC' },
       },
     ],
   },

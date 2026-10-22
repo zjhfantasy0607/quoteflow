@@ -11,4 +11,7 @@ export const authApi = {
     post<{ ok: true }>('/auth/forgot-password', { email }, { silent: true, skipAuthRedirect: true }),
   resetPassword: (token: string, newPassword: string) =>
     post<{ ok: true }>('/auth/reset-password', { token, newPassword }, { silent: true, skipAuthRedirect: true }),
+  /** 供应商用激活邮件里的链接设置密码（R04-11） */
+  activate: (token: string, newPassword: string) =>
+    post<{ ok: true }>('/auth/activate', { token, newPassword }, { silent: true, skipAuthRedirect: true }),
 };

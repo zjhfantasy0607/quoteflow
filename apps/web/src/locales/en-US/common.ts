@@ -27,6 +27,7 @@ const common: LocaleMessages['common'] = {
   confirmTitle: 'Please confirm',
   table: { empty: 'No data', total: '{total} records in total', actions: 'Actions' },
   masked: 'Restricted',
+  listSeparator: ', ',
   saved: 'Saved',
   validation: {
     required: 'Required',

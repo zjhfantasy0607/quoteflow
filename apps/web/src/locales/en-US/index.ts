@@ -7,9 +7,10 @@ import excel from './excel';
 import file from './file';
 import materials from './materials';
 import nav from './nav';
+import suppliers from './suppliers';
 import system from './system';
 import workbench from './workbench';
 
-const enUS: LocaleMessages = { common, nav, auth, workbench, system, materials, file, excel, enums, errors };
+const enUS: LocaleMessages = { common, nav, auth, workbench, system, materials, suppliers, file, excel, enums, errors };
 
 export default enUS;

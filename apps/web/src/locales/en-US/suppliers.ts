@@ -1,0 +1,117 @@
+import type { LocaleMessages } from '../types';
+
+const suppliers: LocaleMessages['suppliers'] = {
+  list: {
+    title: 'Suppliers',
+    subtitle:
+      'Supplier categories, main material categories, contacts and email language; used when inviting quotations',
+    create: 'New supplier',
+    edit: 'Edit supplier',
+    import: 'Import',
+    export: 'Export',
+    importTitle: 'Import suppliers',
+    keywordPlaceholder: 'Code, name or contact',
+    allCategories: 'All categories',
+    allMaterialCategories: 'All main categories',
+    allStatus: 'All statuses',
+    fields: {
+      code: 'Supplier code',
+      name: 'Supplier name',
+      nameZh: 'Supplier name',
+      nameEn: 'English name',
+      creditCode: 'Unified social credit code',
+      category: 'Supplier category',
+      materialCategories: 'Main material categories',
+      contactName: 'Contact',
+      contactEmail: 'Contact email',
+      contactPhone: 'Contact phone',
+      ccEmails: 'CC emails',
+      language: 'Preferred language',
+      country: 'Country or region',
+      address: 'Address',
+      remark: 'Remark',
+      status: 'Status',
+      createdAt: 'Created',
+      updatedAt: 'Updated',
+    },
+    codePlaceholder: 'Leave blank to generate, e.g. SUP10009',
+    codeRule: 'Letters, digits or . _ / -, up to 30 characters; cannot be changed after saving',
+    creditCodePlaceholder: '18 letters or digits; may be blank for overseas suppliers',
+    ccEmailsPlaceholder: 'Type an email and press Enter, up to 5',
+    ccEmailsTip: 'Emails to the supplier are copied to these addresses',
+    languageTip: 'Decides the language of emails sent to the supplier',
+    materialCategoriesPlaceholder: 'Select one or more',
+    materialCategoriesReadonly:
+      'You are not allowed to view material categories, so main categories cannot be changed',
+    categoryOff: 'Category disabled',
+    disable: 'Disable',
+    enable: 'Enable',
+    disableConfirm:
+      'After "{name}" is disabled, its portal accounts are signed out immediately and can no longer sign in, and it cannot be invited to quote. Existing quotations and contracts are not affected. Disable it?',
+    enableConfirm: 'Enable "{name}"?',
+    maskedEditHint: 'You are not allowed to view supplier contacts, so you cannot edit suppliers',
+  },
+  languages: { zhCN: 'Chinese', enUS: 'English', bilingual: 'Bilingual' },
+  detail: {
+    back: 'Back to list',
+    basic: 'Basic information',
+    tabs: { accounts: 'Portal accounts' },
+    disabledBanner:
+      'This supplier is disabled: its portal accounts cannot sign in and it cannot be invited to quote.',
+  },
+  accounts: {
+    create: 'Create portal account',
+    createTip:
+      "An activation email is sent to this address (in the supplier's preferred language). The supplier sets a password from the link in the email and can then sign in to the portal. The link is valid for 7 days and can be used only once.",
+    emailTip: 'This email is the login for the supplier portal and must not belong to another account',
+    fields: {
+      username: 'Login (email)',
+      email: 'Email',
+      name: 'Name',
+      status: 'Status',
+      activation: 'Activation link',
+      lastLoginAt: 'Last sign-in',
+      createdAt: 'Created',
+    },
+    created: 'Account created; the activation email was sent to {email}',
+    resend: 'Resend activation email',
+    resendConfirm: 'Send a new activation email to "{name}"? The link sent earlier will stop working.',
+    resent: 'Activation email sent again',
+    disable: 'Disable',
+    enable: 'Enable',
+    disableConfirm:
+      'After the portal account of "{name}" is disabled, it is signed out immediately and can no longer sign in. Disable it?',
+    enableConfirm:
+      'Enable the portal account of "{name}"? Accounts that were never activated still need to be activated.',
+    validUntil: 'Valid until {time}',
+    expired: 'Expired, please resend',
+    empty: 'No portal accounts yet',
+    supplierDisabled: 'The supplier is disabled, so no account can be created',
+  },
+  categories: {
+    title: 'Supplier Categories',
+    subtitle:
+      'Category labels for suppliers (such as Strategic, Preferred and Standard), required when creating a supplier',
+    create: 'New category',
+    createTitle: 'New supplier category',
+    editTitle: 'Edit supplier category',
+    codeRule: 'Letters, digits or _ . -; cannot be changed after saving',
+    fields: {
+      code: 'Code',
+      nameZh: 'Chinese name',
+      nameEn: 'English name',
+      sort: 'Sort order',
+      status: 'Status',
+      remark: 'Remark',
+    },
+    disable: 'Disable',
+    enable: 'Enable',
+    disableConfirm:
+      'After "{name}" is disabled, it cannot be selected when creating or editing suppliers. Existing suppliers are not affected. Disable it?',
+    enableConfirm: 'Enable "{name}"?',
+    disabledTag: 'Disabled',
+    noDeleteHint: 'Categories cannot be deleted; disable the ones no longer used.',
+  },
+};
+
+export default suppliers;

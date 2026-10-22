@@ -32,5 +32,13 @@ export default {
     category_not_found: '没有这个分类编码',
     category_disabled: '分类已停用',
     invalid_status: '只能填写"启用"或"停用"',
+    invalid_credit_code: '统一社会信用代码应为 18 位字母或数字',
+    duplicate_credit_code: '与第 {row} 行的统一社会信用代码重复',
+    credit_code_taken: '统一社会信用代码已被供应商 {code} 使用',
+    supplier_category_not_found: '没有这个供应商分类，请填写分类编码或中文 / 英文名称',
+    supplier_category_disabled: '供应商分类已停用',
+    main_category_not_found: '没有分类编码 {code}',
+    main_category_disabled: '分类 {code} 已停用',
+    invalid_language: '只能填写 中文、English、中英（或 zh-CN、en-US、bilingual）',
   },
 };

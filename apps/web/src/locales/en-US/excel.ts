@@ -34,6 +34,14 @@ const excel: LocaleMessages['excel'] = {
     category_not_found: 'Unknown category code',
     category_disabled: 'This category is disabled',
     invalid_status: 'Must be Enabled or Disabled',
+    invalid_credit_code: 'The unified social credit code must be 18 letters or digits',
+    duplicate_credit_code: 'Same unified social credit code as row {row}',
+    credit_code_taken: 'This unified social credit code is already used by supplier {code}',
+    supplier_category_not_found: 'Unknown supplier category; use its code or Chinese / English name',
+    supplier_category_disabled: 'The supplier category is disabled',
+    main_category_not_found: 'Unknown category code {code}',
+    main_category_disabled: 'Category {code} is disabled',
+    invalid_language: 'Must be 中文, English or 中英 (or zh-CN, en-US, bilingual)',
   },
 };
 

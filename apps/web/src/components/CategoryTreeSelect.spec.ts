@@ -60,7 +60,13 @@ interface Option {
 /** 只关心传给 el-tree-select 的数据，不渲染 Element Plus 的下拉 */
 const TreeSelectStub = defineComponent({
   name: 'ElTreeSelect',
-  props: { data: { type: Array, default: () => [] }, filterNodeMethod: { type: Function, default: undefined } },
+  props: {
+    data: { type: Array, default: () => [] },
+    filterNodeMethod: { type: Function, default: undefined },
+    multiple: { type: Boolean, default: false },
+    showCheckbox: { type: Boolean, default: false },
+    modelValue: { type: [String, Array], default: undefined },
+  },
   template: '<div class="stub" />',
 });
 
@@ -84,6 +90,7 @@ async function mountSelect(props: Record<string, unknown> = {}) {
   const stub = w.findComponent(TreeSelectStub);
   return {
     w,
+    stub,
     options: () => flatten(stub.props('data') as Option[]),
     filter: stub.props('filterNodeMethod') as (keyword: string, data: Option) => boolean,
   };
@@ -122,6 +129,16 @@ describe('CategoryTreeSelect', () => {
     expect(filter('current', cc)).toBe(true);
     expect(filter('lens', cc)).toBe(false);
     applyLocale('zh-CN');
+  });
+
+  it('默认单选；multiple 时带勾选框可选多个（R04-4 主营分类），停用的分类仍然不能选', async () => {
+    const single = await mountSelect();
+    expect(single.stub.props()).toMatchObject({ multiple: false, showCheckbox: false });
+
+    const multi = await mountSelect({ multiple: true, modelValue: ['id-LED-2835', 'id-DRV-CC'] });
+    expect(multi.stub.props()).toMatchObject({ multiple: true, showCheckbox: true });
+    expect(multi.options()['DRV-CC']).toMatchObject({ disabled: true, off: true });
+    expect(multi.stub.props('modelValue')).toEqual(['id-LED-2835', 'id-DRV-CC']);
   });
 
   it('同一个页面里的多个下拉只请求一次分类树', async () => {

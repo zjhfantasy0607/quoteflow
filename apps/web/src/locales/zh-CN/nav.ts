@@ -2,6 +2,10 @@ export default {
   workbench: '工作台',
   portalHome: '首页',
   login: '登录',
+  suppliersGroup: '供应商管理',
+  suppliers: '供应商列表',
+  supplierCategories: '供应商分类',
+  supplierDetail: '供应商详情',
   materialsGroup: '材料管理',
   materials: '材料库',
   materialCategories: '材料分类',
@@ -14,4 +18,5 @@ export default {
   audit: '操作日志',
   forgotPassword: '找回密码',
   resetPassword: '重置密码',
+  activate: '激活账号',
 };

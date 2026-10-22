@@ -35,4 +35,13 @@ export default {
     requestAgain: '重新申请',
     toLogin: '去登录',
   },
+  activate: {
+    title: '激活供应商门户账号',
+    subtitle: '设置登录密码，完成后用邮箱和这个密码登录供应商门户',
+    submit: '设置密码并激活',
+    success: '账号已激活，请使用邮箱和新密码登录。',
+    missingToken: '链接不完整，请从激活邮件里重新打开。',
+    invalidHint: '如果链接已过期或已经用过，请联系采购人员重新发送激活邮件。',
+    toLogin: '去登录',
+  },
 };

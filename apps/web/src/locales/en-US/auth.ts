@@ -37,6 +37,15 @@ const auth: LocaleMessages['auth'] = {
     requestAgain: 'Request again',
     toLogin: 'Go to sign in',
   },
+  activate: {
+    title: 'Activate your supplier portal account',
+    subtitle: 'Set a password, then sign in to the supplier portal with your email and this password',
+    submit: 'Set password and activate',
+    success: 'Your account is activated. Please sign in with your email and the new password.',
+    missingToken: 'The link is incomplete. Please open it again from the activation email.',
+    invalidHint: 'If the link has expired or was already used, please ask your purchasing contact to send a new activation email.',
+    toLogin: 'Go to sign in',
+  },
 };
 
 export default auth;
