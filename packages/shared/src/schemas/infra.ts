@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { EmailStatus, EmailType } from '../enums';
 import type { SystemParamValue } from '../params';
-import { idSchema, optionalText, pageQuerySchema, requiredText } from './common';
+import { dateQueryParam, idSchema, optionalText, pageQuerySchema, requiredText } from './common';
 
 // ---------- 文件 ----------
 
@@ -39,7 +39,10 @@ export type FileContentQuery = z.infer<typeof fileContentQuerySchema>;
 export const DICT_CODE_PATTERN = /^[A-Za-z0-9_.-]{1,50}$/;
 
 export const createDictTypeSchema = z.object({
-  code: z.string().trim().regex(/^[a-z][a-z0-9_]{1,49}$/),
+  code: z
+    .string()
+    .trim()
+    .regex(/^[a-z][a-z0-9_]{1,49}$/),
   nameZh: requiredText(50),
   nameEn: requiredText(100),
 });
@@ -69,10 +72,7 @@ export type UpdateParamInput = z.infer<typeof updateParamSchema>;
 
 // ---------- 邮件记录 ----------
 
-const dateParam = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .optional();
+const dateParam = dateQueryParam;
 
 export const emailListQuerySchema = pageQuerySchema.extend({
   type: z.enum(EmailType).optional(),

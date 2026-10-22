@@ -15,9 +15,7 @@ export interface Paginated<T> {
 }
 
 /** 查询串里的布尔值："true" / "false"。不要用 z.coerce.boolean()（会把 "false" 当成 true） */
-export const queryBoolean = z
-  .enum(['true', 'false'])
-  .transform((v) => v === 'true');
+export const queryBoolean = z.enum(['true', 'false']).transform((v) => v === 'true');
 
 /** 去掉首尾空白，空串视为未填 */
 export const optionalText = (max: number) =>
@@ -35,6 +33,19 @@ export const commaListParam = z
   .string()
   .trim()
   .max(500)
-  .transform((v) => [...new Set(v.split(',').map((s) => s.trim()).filter(Boolean))]);
+  .transform((v) => [
+    ...new Set(
+      v
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
+  ]);
 
 export const idSchema = z.string().min(1).max(40);
+
+/** 日期查询参数 YYYY-MM-DD（from / to 含当天，按 UTC+8 解释，docs/03 §1） */
+export const dateQueryParam = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .optional();

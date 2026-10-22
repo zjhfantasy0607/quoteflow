@@ -17,6 +17,20 @@ export interface MailTemplateDataMap {
     link: string;
     expiresAt: Date;
   };
+  'approval.request': {
+    name: string;
+    inquiry: { draftNo: string; projectNo: string; title: string };
+    submitterName: string;
+    link: string;
+  };
+  'approval.result': {
+    name: string;
+    approved: boolean;
+    inquiry: { draftNo: string; formalNo: string | null; projectNo: string; title: string };
+    approverName: string;
+    comment: string | null;
+    link: string;
+  };
 }
 
 export type MailTemplateKey = keyof MailTemplateDataMap;
@@ -64,7 +78,57 @@ const activate: MailTemplate<MailTemplateDataMap['account.activate']> = {
   },
 };
 
+/** 询价单提交审批（R06-8）：发给有 inquiry:approve 且数据权限覆盖该单的每个审批人 */
+const approvalRequest: MailTemplate<MailTemplateDataMap['approval.request']> = {
+  type: 'APPROVAL',
+  render(lang, d) {
+    const { draftNo, projectNo, title } = d.inquiry;
+    if (lang === 'zh-CN') {
+      return {
+        subject: `询价单待审批：${draftNo} ${title}`,
+        body: `<p>${esc(d.name)}，您好：</p><p>${esc(d.submitterName)} 提交了询价单，请您审批：</p><ul><li>草稿号：${esc(draftNo)}</li><li>项目号：${esc(projectNo)}</li><li>标题：${esc(title)}</li></ul>${button(d.link, '查看并审批')}`,
+        text: `${d.name}，您好：\n\n${d.submitterName} 提交了询价单，请您审批：\n草稿号：${draftNo}\n项目号：${projectNo}\n标题：${title}\n\n查看并审批：${d.link}`,
+      };
+    }
+    return {
+      subject: `RFQ pending approval: ${draftNo} ${title}`,
+      body: `<p>Dear ${esc(d.name)},</p><p>${esc(d.submitterName)} has submitted an RFQ for your approval:</p><ul><li>Draft No.: ${esc(draftNo)}</li><li>Project No.: ${esc(projectNo)}</li><li>Title: ${esc(title)}</li></ul>${button(d.link, 'Review and approve')}`,
+      text: `Dear ${d.name},\n\n${d.submitterName} has submitted an RFQ for your approval:\nDraft No.: ${draftNo}\nProject No.: ${projectNo}\nTitle: ${title}\n\nReview and approve: ${d.link}`,
+    };
+  },
+};
+
+/** 审批结果（R06-8）：发给负责人和创建人；通过时带正式询价号，驳回时带意见 */
+const approvalResult: MailTemplate<MailTemplateDataMap['approval.result']> = {
+  type: 'APPROVAL',
+  render(lang, d) {
+    const { draftNo, formalNo, projectNo, title } = d.inquiry;
+    const no = formalNo ?? draftNo;
+    if (lang === 'zh-CN') {
+      const label = d.approved ? '审批意见' : '驳回意见';
+      const result = d.approved
+        ? `已由 ${d.approverName} 审批通过，正式询价号为 ${formalNo}，可以邀请供应商并发布询价。`
+        : `已被 ${d.approverName} 驳回，回到草稿，请按意见修改后重新提交。`;
+      return {
+        subject: d.approved ? `询价单已审批通过：${no} ${title}` : `询价单被驳回：${no} ${title}`,
+        body: `<p>${esc(d.name)}，您好：</p><p>询价单 ${esc(draftNo)}（项目号 ${esc(projectNo)}，${esc(title)}）${esc(result)}</p>${d.comment ? `<p>${label}：${esc(d.comment)}</p>` : ''}${button(d.link, '查看询价单')}`,
+        text: `${d.name}，您好：\n\n询价单 ${draftNo}（项目号 ${projectNo}，${title}）${result}${d.comment ? `\n${label}：${d.comment}` : ''}\n\n查看询价单：${d.link}`,
+      };
+    }
+    const result = d.approved
+      ? `has been approved by ${d.approverName}. The formal RFQ No. is ${formalNo}; you can now invite suppliers and publish it.`
+      : `has been rejected by ${d.approverName} and returned to draft. Please revise it according to the comment and submit it again.`;
+    return {
+      subject: d.approved ? `RFQ approved: ${no} ${title}` : `RFQ rejected: ${no} ${title}`,
+      body: `<p>Dear ${esc(d.name)},</p><p>RFQ ${esc(draftNo)} (Project No. ${esc(projectNo)}, ${esc(title)}) ${esc(result)}</p>${d.comment ? `<p>Comment: ${esc(d.comment)}</p>` : ''}${button(d.link, 'View RFQ')}`,
+      text: `Dear ${d.name},\n\nRFQ ${draftNo} (Project No. ${projectNo}, ${title}) ${result}${d.comment ? `\nComment: ${d.comment}` : ''}\n\nView RFQ: ${d.link}`,
+    };
+  },
+};
+
 export const MAIL_TEMPLATES: { [K in MailTemplateKey]: MailTemplate<MailTemplateDataMap[K]> } = {
   'account.resetPassword': resetPassword,
   'account.activate': activate,
+  'approval.request': approvalRequest,
+  'approval.result': approvalResult,
 };

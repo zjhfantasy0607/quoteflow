@@ -17,4 +17,16 @@ export class ScopeService {
     }
     return { OR: self };
   }
+
+  /** 与 inquiryWhere 相同的判断，用于已经取出的单据（如找出数据权限覆盖某张单的审批人，R06-8） */
+  coversInquiry(
+    user: Pick<AuthUser, 'id' | 'dataScope' | 'departmentCode'>,
+    inquiry: { ownerId: string; pdUserId: string | null; createdById: string; departmentCode: string | null },
+  ): boolean {
+    if (user.dataScope === 'ALL') return true;
+    if ([inquiry.ownerId, inquiry.pdUserId, inquiry.createdById].includes(user.id)) return true;
+    return (
+      user.dataScope === 'DEPT' && !!user.departmentCode && inquiry.departmentCode === user.departmentCode
+    );
+  }
 }

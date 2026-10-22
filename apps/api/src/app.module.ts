@@ -15,6 +15,7 @@ import { ParamsModule } from './infra/params/params.service';
 import { SequenceModule } from './infra/sequences/sequence.service';
 import { AuthModule } from './modules/auth/auth.controller';
 import { DictsModule } from './modules/dicts/dicts.controller';
+import { InquiriesModule } from './modules/inquiries/inquiries.controller';
 import { MaterialCategoriesModule } from './modules/material-categories/material-categories.controller';
 import { MaterialsModule } from './modules/materials/materials.controller';
 import { PplModule } from './modules/ppl/ppl.controller';
@@ -49,6 +50,7 @@ const scheduler = process.env.JOBS_ENABLED === 'false' ? [] : [ScheduleModule.fo
     MaterialsModule,
     PplModule,
     SuppliersModule,
+    InquiriesModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })

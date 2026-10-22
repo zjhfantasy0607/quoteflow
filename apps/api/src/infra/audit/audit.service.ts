@@ -1,5 +1,11 @@
 import { Controller, Get, Global, Injectable, Module, Query } from '@nestjs/common';
-import { auditListQuerySchema, type AuditListQuery, type AuditLogDto, type Paginated, type UserType } from '@quoteflow/shared';
+import {
+  auditListQuerySchema,
+  type AuditListQuery,
+  type AuditLogDto,
+  type Paginated,
+  type UserType,
+} from '@quoteflow/shared';
 import type { AuthUser } from '../../common/auth/auth-user';
 import { RequirePermissions } from '../../common/auth/decorators';
 import { skipTake, toPaginated } from '../../common/pagination';
@@ -24,6 +30,28 @@ export interface AuditEntry {
 }
 
 type Client = PrismaService | Prisma.TransactionClient;
+
+/** 单个对象的日志最多返回多少条 */
+const ENTITY_LOG_LIMIT = 1000;
+
+const auditInclude = {
+  actor: { select: { id: true, name: true, username: true } },
+} satisfies Prisma.AuditLogInclude;
+
+function toAuditLogDto(r: Prisma.AuditLogGetPayload<{ include: typeof auditInclude }>): AuditLogDto {
+  return {
+    id: r.id,
+    actor: r.actor,
+    actorType: r.actorType,
+    action: r.action,
+    entityType: r.entityType,
+    entityId: r.entityId,
+    summary: r.summary,
+    detail: r.detail,
+    ip: r.ip,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
 
 @Injectable()
 export class AuditService {
@@ -62,28 +90,28 @@ export class AuditService {
     const [rows, total] = await Promise.all([
       this.prisma.auditLog.findMany({
         where,
-        include: { actor: { select: { id: true, name: true, username: true } } },
+        include: auditInclude,
         orderBy: { createdAt: 'desc' },
         ...skipTake(q),
       }),
       this.prisma.auditLog.count({ where }),
     ]);
-    return toPaginated(
-      rows.map((r) => ({
-        id: r.id,
-        actor: r.actor,
-        actorType: r.actorType,
-        action: r.action,
-        entityType: r.entityType,
-        entityId: r.entityId,
-        summary: r.summary,
-        detail: r.detail,
-        ip: r.ip,
-        createdAt: r.createdAt.toISOString(),
-      })),
-      total,
-      q,
-    );
+    return toPaginated(rows.map(toAuditLogDto), total, q);
+  }
+
+  /** 某个对象的全部记录，按时间正序（询价单的操作日志页签，M06 R06-12） */
+  async listForEntity(
+    entityType: string,
+    entityId: string,
+    client: Client = this.prisma,
+  ): Promise<AuditLogDto[]> {
+    const rows = await client.auditLog.findMany({
+      where: { entityType, entityId },
+      include: auditInclude,
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: ENTITY_LOG_LIMIT,
+    });
+    return rows.map(toAuditLogDto);
   }
 }
 
@@ -93,7 +121,9 @@ export class AuditController {
 
   @RequirePermissions('system:audit:view')
   @Get()
-  list(@Query(new ZodValidationPipe(auditListQuerySchema)) q: AuditListQuery): Promise<Paginated<AuditLogDto>> {
+  list(
+    @Query(new ZodValidationPipe(auditListQuerySchema)) q: AuditListQuery,
+  ): Promise<Paginated<AuditLogDto>> {
     return this.audit.list(q);
   }
 }
