@@ -42,8 +42,8 @@ const materials: LocaleMessages['materials'] = {
     pplInherit: 'Not set (inherit from parent)',
     pplVariantOption: '{name} ({code})',
     pplEffective: 'In effect: {name}',
-    pplInheritedFrom: ' (inherited from {name})',
-    pplNotSet: ' (not set here or on any parent, so the master template is used)',
+    pplInheritedFrom: ', inherited from {name}',
+    pplNotSet: ', as neither this category nor its parents set one',
     pplMasterHint:
       'Choose the master template to stop inheriting the parent variant. Inquiries use the quotation template in effect for their material category.',
     pplVariantMissing: 'Variant {code} is not in the active template set. Please choose another one.',
