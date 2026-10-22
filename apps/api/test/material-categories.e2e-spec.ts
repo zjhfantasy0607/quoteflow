@@ -1,9 +1,9 @@
 import { seedMaterialCategories, seedMaterials } from '../prisma/seed-data/materials';
 import { isForeignKeyViolation } from '../src/common/errors/prisma-errors';
 import type { MaterialCategory, User } from '../src/generated/prisma/client';
-import { Agent, loginAs } from './helpers/auth';
+import { Agent, anonymous, loginAs } from './helpers/auth';
 import { resetDb } from './helpers/db';
-import { createCategory, createMaterial, createUser, seedBase } from './helpers/fixtures';
+import { createCategory, createMaterial, createSupplier, createUser, seedBase } from './helpers/fixtures';
 import { createTestApp, TestContext } from './helpers/test-app';
 
 interface Node {
@@ -282,12 +282,26 @@ describe('M03 材料分类', () => {
     expect(rename?.detail).toMatchObject({ nameZh: ['测试 A', '测试 A2'], sort: [0, 3], remark: [null, '备注'] });
   });
 
-  it('没有 material:category:manage 只能查看分类树；没有 material:view 不能查看', async () => {
+  it('没有 material:category:manage 只能查看分类树；B-10 内部用户没有 material:view 也能读分类树，供应商用户不能', async () => {
     const id = await categoryId('TST-A');
     await buyer.post('/api/material-categories').send({ code: 'TST-X', nameZh: 'x', nameEn: 'x' }).expect(403);
     await buyer.put(`/api/material-categories/${id}`).send({ nameZh: 'x', nameEn: 'x' }).expect(403);
     await buyer.put(`/api/material-categories/${id}/status`).send({ status: 'DISABLED' }).expect(403);
     await buyer.delete(`/api/material-categories/${id}`).expect(403);
-    await approver.get('/api/material-categories/tree').expect(403);
+
+    // 合同批准人没有 material:view：能读分类树，材料库仍然不能看
+    expect(codes(await tree(approver))).toEqual(codes(await tree(buyer)));
+    await approver.get('/api/materials').expect(403);
+
+    const sup = await createSupplier(ctx.prisma);
+    const supplierUser = await createUser(ctx.prisma, {
+      roles: ['SUPPLIER'],
+      userType: 'SUPPLIER',
+      supplierId: sup.id,
+      username: 'tree.reader@supplier.example.com',
+      departmentCode: null,
+    });
+    await (await loginAs(ctx, supplierUser)).get('/api/material-categories/tree').expect(403);
+    await anonymous(ctx).get('/api/material-categories/tree').expect(401);
   });
 });

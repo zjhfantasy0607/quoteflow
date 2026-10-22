@@ -20,7 +20,11 @@ import { MaterialCategoriesService } from './material-categories.service';
 export class MaterialCategoriesController {
   constructor(private readonly categories: MaterialCategoriesService) {}
 
-  @RequirePermissions('material:view')
+  /**
+   * 内部用户登录即可读取（待确认事项 B-10）：分类树和数据字典一样是不敏感的基础数据，
+   * 材料库、供应商主营分类、询价行、邀请供应商的筛选都要用；供应商用户仍被 UserTypeGuard 拒绝
+   */
+  @RequirePermissions()
   @Get('tree')
   tree(
     @Query(new ZodValidationPipe(categoryTreeQuerySchema)) query: CategoryTreeQuery,

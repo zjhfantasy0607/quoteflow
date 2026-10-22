@@ -160,12 +160,9 @@ describe('SuppliersPage', () => {
     w.unmount();
   });
 
-  it('主营材料分类筛选要用材料分类树（material:view）：没有这个权限时不显示', async () => {
-    const without = await mountPage(['supplier:view']);
-    expect(without.find('.category-tree-select').exists()).toBe(false);
-    without.unmount();
-    const withMaterials = await mountPage(['supplier:view', 'material:view']);
-    expect(withMaterials.find('.category-tree-select').exists()).toBe(true);
-    withMaterials.unmount();
+  it('B-10 分类树内部用户都能读：只有 supplier:view 也显示主营材料分类筛选', async () => {
+    const w = await mountPage(['supplier:view']);
+    expect(w.find('.category-tree-select').exists()).toBe(true);
+    w.unmount();
   });
 });

@@ -41,8 +41,6 @@ const suppliers: LocaleMessages['suppliers'] = {
     ccEmailsTip: 'Emails to the supplier are copied to these addresses',
     languageTip: 'Decides the language of emails sent to the supplier',
     materialCategoriesPlaceholder: 'Select one or more',
-    materialCategoriesReadonly:
-      'You are not allowed to view material categories, so main categories cannot be changed',
     categoryOff: 'Category disabled',
     disable: 'Disable',
     enable: 'Enable',

@@ -38,7 +38,6 @@ export default {
     ccEmailsTip: '发给供应商的邮件会抄送这些邮箱',
     languageTip: '决定发给供应商的邮件语言',
     materialCategoriesPlaceholder: '可多选',
-    materialCategoriesReadonly: '你没有查看材料分类的权限，主营材料分类不能修改',
     categoryOff: '分类已停用',
     disable: '停用',
     enable: '启用',

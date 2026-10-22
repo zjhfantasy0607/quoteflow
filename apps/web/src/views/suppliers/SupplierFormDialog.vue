@@ -14,8 +14,6 @@ import { apiError, translateError } from '@/api/http';
 import { suppliersApi } from '@/api/suppliers';
 import CategoryTreeSelect from '@/components/CategoryTreeSelect.vue';
 import SupplierCategorySelect from '@/components/SupplierCategorySelect.vue';
-import { useAuthStore } from '@/stores/auth';
-import { pickName } from '@/utils/format';
 import { supplierLanguageLabel } from '@/utils/suppliers';
 import { serverFieldErrors, zodErrors, type FieldErrors } from '@/utils/validate';
 
@@ -23,11 +21,8 @@ const props = defineProps<{ supplier: SupplierDto | null }>();
 const visible = defineModel<boolean>({ required: true });
 const emit = defineEmits<{ saved: [SupplierDto] }>();
 
-const { t, locale } = useI18n();
-const auth = useAuthStore();
+const { t } = useI18n();
 const isEdit = computed(() => props.supplier !== null);
-/** 材料分类树要 material:view（M03）；没有时主营材料分类只读，保存时原样提交（待确认事项 B-10） */
-const canViewMaterials = computed(() => auth.hasPerm('material:view'));
 
 /** 后端错误码 → 表单字段 */
 const FIELD_OF_ERROR: Record<string, string> = {
@@ -184,22 +179,10 @@ async function save(): Promise<void> {
         :error="errors.materialCategoryIds"
       >
         <CategoryTreeSelect
-          v-if="canViewMaterials"
           v-model="form.materialCategoryIds"
           multiple
           :placeholder="t('suppliers.list.materialCategoriesPlaceholder')"
         />
-        <template v-else>
-          <el-tag
-            v-for="c in supplier?.materialCategories ?? []"
-            :key="c.id"
-            type="info"
-            class="category-tag"
-          >
-            {{ pickName(c, locale) }}
-          </el-tag>
-          <div class="tip">{{ t('suppliers.list.materialCategoriesReadonly') }}</div>
-        </template>
       </el-form-item>
       <el-row :gutter="16">
         <el-col :span="12">
@@ -258,9 +241,6 @@ async function save(): Promise<void> {
 </template>
 
 <style scoped>
-.category-tag {
-  margin-right: 6px;
-}
 .tip {
   width: 100%;
   color: var(--el-text-color-secondary);

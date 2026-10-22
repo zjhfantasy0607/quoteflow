@@ -21,8 +21,6 @@ import SupplierFormDialog from './SupplierFormDialog.vue';
 const { t, locale } = useI18n();
 const auth = useAuthStore();
 const canManage = computed(() => auth.hasPerm('supplier:manage'));
-/** 材料分类树要 material:view（M03），没有时不显示主营材料分类筛选（待确认事项 B-10） */
-const canViewMaterials = computed(() => auth.hasPerm('material:view'));
 
 const query = reactive({
   keyword: '',
@@ -147,7 +145,7 @@ onMounted(load);
             />
           </div>
         </el-form-item>
-        <el-form-item v-if="canViewMaterials">
+        <el-form-item>
           <CategoryTreeSelect
             v-model="query.materialCategoryId"
             allow-disabled
