@@ -9,6 +9,7 @@ export default defineConfig(
   {
     ignores: [
       '**/dist/**',
+      'apps/api/dist-seed/**',
       '**/node_modules/**',
       '**/coverage/**',
       '**/playwright-report/**',

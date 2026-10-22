@@ -15,7 +15,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:reset": "prisma migrate reset --force && prisma db seed",
     "seed": "prisma db seed",
-    "seed:demo": "tsx prisma/seed-demo.ts"
+    "seed:demo": "tsc -p tsconfig.seed.json && node dist-seed/prisma/seed-demo.js"
   },
   "dependencies": {
     "@nestjs/common": "11.2.7",

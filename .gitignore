@@ -8,6 +8,7 @@ test-results/
 .env.local
 apps/api/storage/
 apps/api/src/generated/
+apps/api/dist-seed/
 .DS_Store
 *.log
 ~$*
