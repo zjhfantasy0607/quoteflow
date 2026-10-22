@@ -169,6 +169,7 @@ export default {
       materialCategory: '材料分类',
       material: '材料',
       supplier: '供应商',
+      pplSet: 'PPL 模板集',
     },
     actions: {
       auth_login: '登录',
@@ -213,6 +214,8 @@ export default {
       supplierAccount_enable: '启用门户账号',
       supplierAccount_disable: '停用门户账号',
       auth_activate: '激活门户账号',
+      pplSet_create: '上传 PPL 模板集',
+      pplSet_activate: '激活 PPL 模板集',
     },
   },
 };

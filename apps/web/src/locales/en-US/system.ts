@@ -186,6 +186,7 @@ const system: LocaleMessages['system'] = {
       materialCategory: 'Material category',
       material: 'Material',
       supplier: 'Supplier',
+      pplSet: 'PPL template set',
     },
     actions: {
       auth_login: 'Sign in',
@@ -230,6 +231,8 @@ const system: LocaleMessages['system'] = {
       supplierAccount_enable: 'Enable portal account',
       supplierAccount_disable: 'Disable portal account',
       auth_activate: 'Activate portal account',
+      pplSet_create: 'Upload PPL template set',
+      pplSet_activate: 'Activate PPL template set',
     },
   },
 };

@@ -1,5 +1,6 @@
 import { hashPassword } from '../../src/common/auth/password';
 import { seedDicts, seedRoles } from '../../prisma/seed-data/base';
+import { seedPplTemplateSets } from '../../prisma/seed-data/ppl';
 import type {
   EnableStatus,
   Material,
@@ -13,10 +14,11 @@ import type {
 
 export const TEST_PASSWORD = 'Passw0rd!';
 
-/** 每个测试文件 resetDb() 之后调用：角色 + 系统字典 */
+/** 每个测试文件 resetDb() 之后调用：角色 + 系统字典 + PPL 模板集版本 1（激活） */
 export async function seedBase(prisma: PrismaClient): Promise<void> {
   await seedRoles(prisma);
   await seedDicts(prisma);
+  await seedPplTemplateSets(prisma);
 }
 
 let seq = 0;

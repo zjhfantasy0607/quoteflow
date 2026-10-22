@@ -5,6 +5,7 @@ import { PrismaClient } from '../src/generated/prisma/client';
 import { createPgAdapter } from '../src/prisma/pg-adapter';
 import { seedDicts, seedInternalUsers, seedRoles } from './seed-data/base';
 import { seedMaterialCategories, seedMaterials } from './seed-data/materials';
+import { seedPplTemplateSets } from './seed-data/ppl';
 import { seedSuppliers } from './seed-data/suppliers';
 
 // DATABASE_URL 由 prisma db seed 传入（prisma.config.ts 已读取 .env）
@@ -14,10 +15,11 @@ async function main(): Promise<void> {
   await seedRoles(prisma);
   await seedDicts(prisma);
   await seedInternalUsers(prisma, hashPassword);
+  await seedPplTemplateSets(prisma);
   await seedMaterialCategories(prisma);
   await seedMaterials(prisma);
   await seedSuppliers(prisma, hashPassword);
-  console.log('seed: roles, dictionaries, internal users, material categories, materials and suppliers are ready');
+  console.log('seed: roles, dictionaries, internal users, PPL template set, material categories, materials and suppliers are ready');
 }
 
 main()

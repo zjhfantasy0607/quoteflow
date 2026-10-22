@@ -17,6 +17,7 @@ import { AuthModule } from './modules/auth/auth.controller';
 import { DictsModule } from './modules/dicts/dicts.controller';
 import { MaterialCategoriesModule } from './modules/material-categories/material-categories.controller';
 import { MaterialsModule } from './modules/materials/materials.controller';
+import { PplModule } from './modules/ppl/ppl.controller';
 import { RolesModule } from './modules/roles/roles.controller';
 import { SuppliersModule } from './modules/suppliers/suppliers.controller';
 import { UsersModule } from './modules/users/users.controller';
@@ -46,6 +47,7 @@ const scheduler = process.env.JOBS_ENABLED === 'false' ? [] : [ScheduleModule.fo
     RolesModule,
     MaterialCategoriesModule,
     MaterialsModule,
+    PplModule,
     SuppliersModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
