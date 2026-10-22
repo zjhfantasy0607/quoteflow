@@ -5,6 +5,7 @@ import type {
   Material,
   MaterialCategory,
   PrismaClient,
+  Supplier,
   User,
   UserStatus,
   UserType,
@@ -90,6 +91,37 @@ export async function createMaterial(
       unitCode: options.unitCode ?? 'PCS',
       categoryId: options.categoryId,
       status: options.status ?? 'ENABLED',
+    },
+  });
+}
+
+let supplierSeq = 0;
+
+/** 直接写库建供应商（编码默认 TS-0001 起，不占用 SUP 序列） */
+export async function createSupplier(
+  prisma: PrismaClient,
+  options: {
+    code?: string;
+    nameZh?: string;
+    categoryCode?: string;
+    contactEmail?: string;
+    preferredLanguage?: string;
+    status?: EnableStatus;
+    materialCategoryIds?: string[];
+  } = {},
+): Promise<Supplier> {
+  supplierSeq += 1;
+  return prisma.supplier.create({
+    data: {
+      code: options.code ?? `TS-${String(supplierSeq).padStart(4, '0')}`,
+      nameZh: options.nameZh ?? `测试供应商 ${supplierSeq}`,
+      categoryCode: options.categoryCode ?? 'NORMAL',
+      contactName: `联系人 ${supplierSeq}`,
+      contactEmail: options.contactEmail ?? `contact${supplierSeq}@supplier.example.com`,
+      ccEmails: [],
+      preferredLanguage: options.preferredLanguage ?? 'zh-CN',
+      status: options.status ?? 'ENABLED',
+      materialCategories: { create: (options.materialCategoryIds ?? []).map((categoryId) => ({ categoryId })) },
     },
   });
 }

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   isStrongPassword,
+  type ActivateAccountInput,
   type ChangePasswordInput,
   type ForgotPasswordInput,
   type Locale,
@@ -155,6 +156,31 @@ export class AuthService {
         { actor: null, action: 'auth.forgotPassword', entityType: 'user', entityId: user.id, ip: meta.ip },
         tx,
       );
+    });
+  }
+
+  /**
+   * 激活供应商门户账号（R04-11）：用激活邮件里的令牌设置密码，待激活 → 启用。
+   * 令牌无效、过期、已用过返回 AUTH_TOKEN_INVALID；账号或所属供应商已停用返回 AUTH_ACCOUNT_DISABLED（令牌不消耗）
+   */
+  async activate(input: ActivateAccountInput): Promise<void> {
+    if (!isStrongPassword(input.newPassword)) throw new AppException('AUTH_PASSWORD_WEAK');
+    const passwordHash = await hashPassword(input.newPassword);
+    await this.prisma.$transaction(async (tx) => {
+      const userId = await this.tokens.consume(input.token, 'ACTIVATE', tx);
+      const user = await tx.user.findUniqueOrThrow({
+        where: { id: userId },
+        include: { supplier: { select: { status: true } } },
+      });
+      if (user.status === 'DISABLED' || (user.userType === 'SUPPLIER' && user.supplier?.status !== 'ENABLED')) {
+        throw new AppException('AUTH_ACCOUNT_DISABLED');
+      }
+      const res = await tx.user.updateMany({
+        where: { id: userId, status: 'PENDING_ACTIVATION' },
+        data: { passwordHash, status: 'ACTIVE' },
+      });
+      if (res.count !== 1) throw new AppException('AUTH_TOKEN_INVALID');
+      await this.audit.log({ actor: null, action: 'auth.activate', entityType: 'user', entityId: userId }, tx);
     });
   }
 

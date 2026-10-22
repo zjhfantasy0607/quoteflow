@@ -11,6 +11,8 @@ export * from './schemas/auth';
 export * from './schemas/system';
 export * from './schemas/infra';
 export * from './schemas/materials';
+export * from './schemas/suppliers';
 export * from './types/system';
 export * from './types/infra';
 export * from './types/materials';
+export * from './types/suppliers';

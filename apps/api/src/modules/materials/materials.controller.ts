@@ -35,25 +35,12 @@ import { CurrentUser, RequirePermissions } from '../../common/auth/decorators';
 import { ClockService } from '../../common/clock/clock.service';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { inAppTz } from '../../common/time';
-import { contentDisposition } from '../../infra/files/file-types';
+import { IMPORT_HARD_LIMIT_BYTES, xlsxFile } from '../../infra/excel/excel-http';
 import type { UploadedFileInput } from '../../infra/files/files.service';
 import { MaterialCategoriesModule } from '../material-categories/material-categories.controller';
 import { MaterialImageResolver } from './material-image.resolver';
 import { MaterialsExcelService } from './materials-excel.service';
 import { MaterialsService } from './materials.service';
-
-const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-/** multer 的硬上限；导入文件的实际上限（10MB）由 service 判断，超出时返回 FILE_TOO_LARGE */
-const IMPORT_HARD_LIMIT_BYTES = 20 * 1024 * 1024;
-
-function xlsxFile(res: Response, name: string, buffer: Buffer): StreamableFile {
-  res.set({
-    'Content-Type': XLSX_MIME,
-    'Content-Disposition': contentDisposition('attachment', name),
-    'Cache-Control': 'private, no-store',
-  });
-  return new StreamableFile(buffer);
-}
 
 @Controller('materials')
 export class MaterialsController {

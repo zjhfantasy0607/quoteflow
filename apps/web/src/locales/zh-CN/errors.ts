@@ -49,6 +49,7 @@ const errors: Record<ErrorCode, string> = {
   SUPPLIER_CREDIT_CODE_TAKEN: '统一社会信用代码已存在',
   SUPPLIER_DISABLED: '供应商已停用',
   SUPPLIER_ACCOUNT_EXISTS: '该邮箱已开通账号',
+  SUPPLIER_ACCOUNT_NOT_PENDING: '该账号已激活或已停用，不能重发激活邮件',
   PPL_DEFINITION_INVALID: '模板定义有误',
   PPL_VARIANT_NOT_FOUND: '模板变体不存在',
   PPL_SET_NOT_FOUND: '模板版本不存在',

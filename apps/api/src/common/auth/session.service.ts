@@ -125,6 +125,12 @@ export class SessionService {
     });
   }
 
+  /** 供应商停用时删除其全部门户用户的会话（R04-6、P-6） */
+  async revokeAllForSuppliers(supplierIds: string[], client: Prisma.TransactionClient = this.prisma): Promise<void> {
+    if (supplierIds.length === 0) return;
+    await client.session.deleteMany({ where: { user: { supplierId: { in: supplierIds } } } });
+  }
+
   private async expiryFrom(now: Date): Promise<Date> {
     const hours = await this.params.get('security.sessionHours');
     return new Date(now.getTime() + hours * 3600_000);

@@ -10,6 +10,9 @@ const pad = (n: number, width: number) => String(n).padStart(width, '0');
 /** MAT-000001 */
 export const formatMaterialCode = (n: number) => `MAT-${pad(n, 6)}`;
 
+/** SUP10001：序列值 1 对应 SUP10001 */
+export const formatSupplierCode = (n: number) => `SUP${10000 + n}`;
+
 /** 业务编号（docs/01 §13）：INSERT ... ON CONFLICT 原子自增，并发安全；日期按 UTC+8 */
 @Injectable()
 export class SequenceService {
@@ -58,9 +61,9 @@ export class SequenceService {
     return formatMaterialCode(await this.next('MAT', client));
   }
 
-  /** SUP10001 起（全局） */
+  /** SUP10001 起（全局）。可能和手填的编码撞号，供应商模块取号时会跳过已占用的 */
   async supplierCode(client: Client = this.prisma): Promise<string> {
-    return `SUP${10000 + (await this.next('SUP', client))}`;
+    return formatSupplierCode(await this.next('SUP', client));
   }
 }
 

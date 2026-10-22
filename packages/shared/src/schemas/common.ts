@@ -30,4 +30,11 @@ export const optionalText = (max: number) =>
 
 export const requiredText = (max: number) => z.string().trim().min(1).max(max);
 
+/** 查询串里逗号分隔的多个值（如 categoryCodes=STRATEGIC,EXCELLENT），去空白、去重 */
+export const commaListParam = z
+  .string()
+  .trim()
+  .max(500)
+  .transform((v) => [...new Set(v.split(',').map((s) => s.trim()).filter(Boolean))]);
+
 export const idSchema = z.string().min(1).max(40);

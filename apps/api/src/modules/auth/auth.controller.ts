@@ -1,10 +1,12 @@
 import { Body, Controller, Get, HttpCode, Module, Post, Put, Req, Res } from '@nestjs/common';
 import {
+  activateAccountSchema,
   changePasswordSchema,
   forgotPasswordSchema,
   loginSchema,
   resetPasswordWithTokenSchema,
   updateLocaleSchema,
+  type ActivateAccountInput,
   type ChangePasswordInput,
   type ForgotPasswordInput,
   type LoginInput,
@@ -57,6 +59,15 @@ export class AuthController {
     @Body(new ZodValidationPipe(resetPasswordWithTokenSchema)) body: ResetPasswordWithTokenInput,
   ): Promise<{ ok: true }> {
     await this.auth.resetPassword(body);
+    return { ok: true };
+  }
+
+  /** 供应商用激活邮件里的链接设置密码（R04-11） */
+  @Public()
+  @Post('activate')
+  @HttpCode(200)
+  async activate(@Body(new ZodValidationPipe(activateAccountSchema)) body: ActivateAccountInput): Promise<{ ok: true }> {
+    await this.auth.activate(body);
     return { ok: true };
   }
 

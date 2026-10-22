@@ -58,6 +58,19 @@ export class CategoryIndex {
     return result;
   }
 
+  /**
+   * 新选用分类前校验：存在且有效启用，否则 VALIDATION_FAILED（path 指向请求里的字段）/ CATEGORY_DISABLED（R03-2）。
+   * 一次要校验多个分类时（供应商主营分类）先 loadIndex() 再逐个调用，只读一次分类表
+   */
+  assertSelectable(id: string, path = 'categoryId'): MaterialCategory {
+    const category = this.byId.get(id);
+    if (!category) {
+      throw new AppException('VALIDATION_FAILED', undefined, [{ path, code: 'not_found', message: 'Category not found' }]);
+    }
+    if (!this.isEffectiveEnabled(id)) throw new AppException('CATEGORY_DISABLED', { code: category.code });
+    return category;
+  }
+
   /** 自己和全部下级的 id（R03-6） */
   subtreeIds(id: string): string[] {
     if (!this.byId.has(id)) return [];
@@ -116,13 +129,7 @@ export class MaterialCategoriesService {
    * 否则 VALIDATION_FAILED / CATEGORY_DISABLED（R03-2）
    */
   async assertSelectable(id: string, client: Client = this.prisma, path = 'categoryId'): Promise<MaterialCategory> {
-    const index = await this.loadIndex(client);
-    const category = index.get(id);
-    if (!category) {
-      throw new AppException('VALIDATION_FAILED', undefined, [{ path, code: 'not_found', message: 'Category not found' }]);
-    }
-    if (!index.isEffectiveEnabled(id)) throw new AppException('CATEGORY_DISABLED', { code: category.code });
-    return category;
+    return (await this.loadIndex(client)).assertSelectable(id, path);
   }
 
   /** R03-1：code 唯一、创建后不可改；上级必须有效启用 */

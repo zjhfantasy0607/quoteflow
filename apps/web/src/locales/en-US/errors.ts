@@ -49,6 +49,7 @@ const errors: Record<ErrorCode, string> = {
   SUPPLIER_CREDIT_CODE_TAKEN: 'This unified social credit code already exists.',
   SUPPLIER_DISABLED: 'This supplier is disabled.',
   SUPPLIER_ACCOUNT_EXISTS: 'An account already exists for this email.',
+  SUPPLIER_ACCOUNT_NOT_PENDING: 'This account is already activated or disabled, so no activation email can be sent.',
   PPL_DEFINITION_INVALID: 'The template definition is invalid.',
   PPL_VARIANT_NOT_FOUND: 'The template variant does not exist.',
   PPL_SET_NOT_FOUND: 'The template version does not exist.',
