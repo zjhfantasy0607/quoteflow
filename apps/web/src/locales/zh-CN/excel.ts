@@ -47,5 +47,6 @@ export default {
     invalid_option: '没有选项 {value}',
     line_mismatch: '行号被改动，这一行应为询价行 {lineNo}，请重新下载模板',
     unexpected_row: '询价行之外多出的行，请删除',
+    not_positive: '必须大于 0',
   },
 };

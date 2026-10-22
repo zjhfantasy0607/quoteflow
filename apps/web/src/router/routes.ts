@@ -16,6 +16,47 @@ export const buyerRoute: RouteRecordRaw = {
       meta: { titleKey: 'nav.workbench', userType: 'INTERNAL', menu: { icon: 'House', order: 0 } },
     },
     {
+      path: 'inquiries',
+      name: 'inquiries',
+      component: () => import('@/views/inquiries/InquiriesPage.vue'),
+      meta: {
+        titleKey: 'nav.inquiries',
+        userType: 'INTERNAL',
+        perm: 'inquiry:view',
+        menu: { icon: 'List', order: 100, groupKey: 'nav.inquiriesGroup', groupIcon: 'Memo' },
+      },
+    },
+    {
+      path: 'inquiries/approvals',
+      name: 'inquiry-approvals',
+      component: () => import('@/views/inquiries/InquiryApprovalsPage.vue'),
+      meta: {
+        titleKey: 'nav.inquiryApprovals',
+        userType: 'INTERNAL',
+        perm: 'inquiry:approve',
+        menu: { icon: 'Stamp', order: 101, groupKey: 'nav.inquiriesGroup', groupIcon: 'Memo' },
+      },
+    },
+    {
+      path: 'inquiries/new',
+      name: 'inquiry-new',
+      component: () => import('@/views/inquiries/InquiryEditPage.vue'),
+      meta: { titleKey: 'nav.inquiryNew', userType: 'INTERNAL', perm: 'inquiry:create' },
+    },
+    {
+      // 页面按 allowedActions 判断能不能编辑（表头、询价行要 inquiry:create，附件要 inquiry:spec）
+      path: 'inquiries/:id/edit',
+      name: 'inquiry-edit',
+      component: () => import('@/views/inquiries/InquiryEditPage.vue'),
+      meta: { titleKey: 'nav.inquiryEdit', userType: 'INTERNAL', perm: 'inquiry:view' },
+    },
+    {
+      path: 'inquiries/:id',
+      name: 'inquiry-detail',
+      component: () => import('@/views/inquiries/InquiryDetailPage.vue'),
+      meta: { titleKey: 'nav.inquiryDetail', userType: 'INTERNAL', perm: 'inquiry:view' },
+    },
+    {
       path: 'suppliers',
       name: 'suppliers',
       component: () => import('@/views/suppliers/SuppliersPage.vue'),

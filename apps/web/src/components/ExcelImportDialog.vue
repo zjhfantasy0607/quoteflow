@@ -10,7 +10,13 @@ import { importErrorView, type ImportErrorView } from '@/utils/excel';
  * 标准 Excel 导入（#29、R02-9）：下载模板 → 选文件 → 导入 → 成功提示，或分"表头错误 / 行错误"展示。
  * upload 由业务模块提供（如材料导入接口），请求要带 silent，错误统一在这里展示。
  */
-const props = defineProps<{ title: string; templateUrl: string; upload: (file: File) => Promise<ImportResultDto> }>();
+const props = defineProps<{
+  title: string;
+  templateUrl: string;
+  upload: (file: File) => Promise<ImportResultDto>;
+  /** 成功提示，默认"新增 x 条，更新 y 条"（只新增的导入如询价行可以换掉） */
+  successMessage?: (result: ImportResultDto) => string;
+}>();
 const visible = defineModel<boolean>({ required: true });
 const emit = defineEmits<{ imported: [ImportResultDto] }>();
 
@@ -48,7 +54,10 @@ async function start(): Promise<void> {
   error.value = null;
   try {
     const result = await props.upload(file.value);
-    ElMessage.success(t('excel.import.success', { created: result.created, updated: result.updated }));
+    ElMessage.success(
+      props.successMessage?.(result) ??
+        t('excel.import.success', { created: result.created, updated: result.updated }),
+    );
     emit('imported', result);
     visible.value = false;
   } catch (err) {

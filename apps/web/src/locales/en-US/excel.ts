@@ -49,6 +49,7 @@ const excel: LocaleMessages['excel'] = {
     invalid_option: 'Unknown option {value}',
     line_mismatch: 'The line number was changed; this row should be line {lineNo}. Please download the template again',
     unexpected_row: 'Extra row below the quotation lines; please delete it',
+    not_positive: 'Must be greater than 0',
   },
 };
 

@@ -30,7 +30,7 @@ const errors: Record<ErrorCode, string> = {
   PARAM_INVALID: '参数值不符合要求',
   FILE_TOO_LARGE: '文件超过大小限制（{maxMB} MB）',
   FILE_TYPE_NOT_ALLOWED: '不支持的文件类型',
-  FILE_LIMIT_EXCEEDED: '文件数量超过上限',
+  FILE_LIMIT_EXCEEDED: '文件数量超过上限（最多 {max} 个）',
   FILE_ACCESS_DENIED: '无权访问该文件',
   EXCEL_PARSE_FAILED: '无法读取文件，请上传有效的 .xlsx 文件',
   EXCEL_EMPTY: '文件中没有数据',

@@ -4,13 +4,14 @@ import enums from './enums';
 import errors from './errors';
 import excel from './excel';
 import file from './file';
+import inquiries from './inquiries';
 import materials from './materials';
 import nav from './nav';
 import suppliers from './suppliers';
 import system from './system';
 import workbench from './workbench';
 
-const zhCN = { common, nav, auth, workbench, system, materials, suppliers, file, excel, enums, errors };
+const zhCN = { common, nav, auth, workbench, system, materials, suppliers, inquiries, file, excel, enums, errors };
 
 export default zhCN;
 

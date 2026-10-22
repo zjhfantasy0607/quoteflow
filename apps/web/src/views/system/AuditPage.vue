@@ -5,10 +5,21 @@ import { useI18n } from 'vue-i18n';
 import { auditApi, usersApi } from '@/api/system';
 import PageHeader from '@/components/PageHeader.vue';
 import { useAuthStore } from '@/stores/auth';
+import { auditActionLabel } from '@/utils/audit';
 import { formatDateTime } from '@/utils/format';
 
 /** 目前会写操作日志的对象类型；未翻译的类型和动作直接显示代码 */
-const ENTITY_TYPES = ['user', 'role', 'dictType', 'dictItem', 'systemParam', 'email', 'materialCategory', 'material'];
+const ENTITY_TYPES = [
+  'user',
+  'role',
+  'dictType',
+  'dictItem',
+  'systemParam',
+  'email',
+  'materialCategory',
+  'material',
+  'inquiry',
+];
 
 const { t, te } = useI18n();
 const auth = useAuthStore();
@@ -26,11 +37,6 @@ const rows = ref<AuditLogDto[]>([]);
 const total = ref(0);
 const loading = ref(false);
 const users = ref<UserDto[]>([]);
-
-function actionLabel(action: string): string {
-  const key = `system.audit.actions.${action.replace(/\./g, '_')}`;
-  return te(key) ? t(key) : action;
-}
 
 function entityLabel(type: string): string {
   const key = `system.audit.entityTypes.${type}`;
@@ -140,7 +146,7 @@ onMounted(async () => {
         </el-table-column>
         <el-table-column :label="t('system.audit.fields.action')" min-width="150">
           <template #default="{ row }">
-            <span :title="row.action">{{ actionLabel(row.action) }}</span>
+            <span :title="row.action">{{ auditActionLabel(row.action) }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('system.audit.fields.entity')" min-width="200" show-overflow-tooltip>

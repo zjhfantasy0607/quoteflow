@@ -30,7 +30,7 @@ const errors: Record<ErrorCode, string> = {
   PARAM_INVALID: 'The parameter value is invalid.',
   FILE_TOO_LARGE: 'The file exceeds the size limit ({maxMB} MB).',
   FILE_TYPE_NOT_ALLOWED: 'This file type is not supported.',
-  FILE_LIMIT_EXCEEDED: 'Too many files.',
+  FILE_LIMIT_EXCEEDED: 'Too many files (maximum {max}).',
   FILE_ACCESS_DENIED: 'You do not have access to this file.',
   EXCEL_PARSE_FAILED: 'The file cannot be read. Please upload a valid .xlsx file.',
   EXCEL_EMPTY: 'The file contains no data.',
