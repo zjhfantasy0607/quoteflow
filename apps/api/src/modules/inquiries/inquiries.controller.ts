@@ -62,7 +62,6 @@ import {
   type PageQuery,
   type Paginated,
   type PublishRoundInput,
-  type QuoteResponseDto,
   type RejectInquiryInput,
   type RemindQuotesInput,
   type ReorderLinesInput,
@@ -79,6 +78,7 @@ import type { UploadedFileInput } from '../../infra/files/files.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MaterialCategoriesModule } from '../material-categories/material-categories.controller';
 import { MaterialsModule } from '../materials/materials.controller';
+import { PointsModule } from '../points/points.service';
 import { PplModule } from '../ppl/ppl.controller';
 import { AutoReminderJob } from './auto-reminder.job';
 import { InquiryAccessService } from './inquiry-access.service';
@@ -90,13 +90,16 @@ import { InquiryLinesService } from './inquiry-lines.service';
 import { InquiryNoticesService } from './inquiry-notices.service';
 import { InquiryWorkflowService } from './inquiry-workflow.service';
 import { InquiriesService } from './inquiries.service';
-import { RoundResponsesService } from './round-responses.service';
+import { RoundDeadlineJob } from './round-deadline.job';
 import { RoundStateService } from './round-state.service';
 import { RoundWorkflowService } from './round-workflow.service';
 
 const roundNoPipe = new ZodValidationPipe(roundNoSchema);
 
-/** M06 询价单与审批、M07 邀请与发布（docs/modules/M06 §4、M07 §4）。所有接口叠加数据权限，范围外的单据返回 404 */
+/**
+ * M06 询价单与审批、M07 邀请与发布、M10 提前截止与开标（docs/modules/M06 §4、M07 §4、M10 §4）。
+ * 所有接口叠加数据权限，范围外的单据返回 404；供应商响应与报价查看在 QuotesModule（要经过 SealService）
+ */
 @Controller('inquiries')
 export class InquiriesController {
   constructor(
@@ -108,7 +111,6 @@ export class InquiriesController {
     private readonly files: InquiryFilesService,
     private readonly invitees: InquiryInviteesService,
     private readonly rounds: RoundWorkflowService,
-    private readonly responses: RoundResponsesService,
   ) {}
 
   @RequirePermissions('inquiry:view')
@@ -319,15 +321,26 @@ export class InquiriesController {
     return this.rounds.extendDeadline(user, id, roundNo, body);
   }
 
-  /** 本模块只返回状态字段（开标前密封，05 §7.1 S-1） */
-  @RequirePermissions('inquiry:view')
-  @Get(':id/rounds/:roundNo/responses')
-  responseList(
+  @RequirePermissions('inquiry:open')
+  @Post(':id/rounds/:roundNo/close-early')
+  @HttpCode(200)
+  closeEarly(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Param('roundNo', roundNoPipe) roundNo: number,
-  ): Promise<QuoteResponseDto[]> {
-    return this.responses.list(user, id, roundNo);
+  ): Promise<InquiryDetailDto> {
+    return this.rounds.closeEarly(user, id, roundNo);
+  }
+
+  @RequirePermissions('inquiry:open')
+  @Post(':id/rounds/:roundNo/open')
+  @HttpCode(200)
+  open(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('roundNo', roundNoPipe) roundNo: number,
+  ): Promise<InquiryDetailDto> {
+    return this.rounds.open(user, id, roundNo);
   }
 
   @RequirePermissions('inquiry:create')
@@ -436,11 +449,11 @@ export class InquiriesController {
 }
 
 /**
- * 导出给后续模块：InquiryAccessService、RoundStateService（M10 截止与开标、M12 定标、M13 变更轮次）、
+ * 导出给后续模块：InquiryAccessService、RoundStateService（M12 定标、M13 变更轮次）、
  * InquiryNoticesService（M13 的变更通知可以照着加）、InquiryLinesService / InquiryFilesService（M13 复用行与附件）
  */
 @Module({
-  imports: [MaterialCategoriesModule, MaterialsModule, PplModule],
+  imports: [MaterialCategoriesModule, MaterialsModule, PplModule, PointsModule],
   controllers: [InquiriesController],
   providers: [
     InquiryAccessService,
@@ -454,8 +467,8 @@ export class InquiriesController {
     InquiryInviteesService,
     InquiryNoticesService,
     RoundWorkflowService,
-    RoundResponsesService,
     AutoReminderJob,
+    RoundDeadlineJob,
   ],
   exports: [
     InquiryAccessService,
@@ -465,6 +478,7 @@ export class InquiriesController {
     InquiryFilesService,
     InquiryNoticesService,
     AutoReminderJob,
+    RoundDeadlineJob,
   ],
 })
 export class InquiriesModule {}

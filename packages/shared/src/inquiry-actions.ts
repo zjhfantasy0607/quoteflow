@@ -67,7 +67,8 @@ export function isRoundEditable(
  * 保证"按钮显示"和"接口放行"一致。数据权限不在这里判断（范围外的单据直接 404）。
  * 轮次类动作（发布、补充邀请、催报、延期）都针对当前轮次。
  * M06 覆盖 edit、submit、approve、reject、发布前的 cancel；M07 覆盖 editInvitees、publish、lateInvite、
- * remind、extendDeadline 和发布后的 cancel；M08 覆盖 viewAccessLog；其余动作由 M10 起的模块补充。
+ * remind、extendDeadline 和发布后的 cancel；M08 覆盖 viewAccessLog；M10 覆盖 closeEarly、open；
+ * 其余动作由 M11 起的模块补充。
  */
 export function computeInquiryActions(ctx: InquiryActionContext, perms: PermissionChecker): InquiryAction[] {
   const can = (code: PermissionCode) => perms.has(code);
@@ -94,6 +95,11 @@ export function computeInquiryActions(ctx: InquiryActionContext, perms: Permissi
   // R07-10：报价完成后也能延期，回到等待报价
   const extendable: RoundStatus[] = [RoundStatus.WAITING_QUOTES, RoundStatus.QUOTES_CLOSED];
   if (approved && extendable.includes(round) && can('inquiry:deadline')) actions.push('extendDeadline');
+  // R10-2：提前截止另外要求全部报价单已响应，这里不知道响应情况：接口复核（ROUND_NOT_ALL_RESPONDED），
+  // 前端按响应列表决定按钮能不能点
+  if (approved && round === RoundStatus.WAITING_QUOTES && can('inquiry:open')) actions.push('closeEarly');
+  // R10-3：只有报价完成的轮次能开标
+  if (approved && round === RoundStatus.QUOTES_CLOSED && can('inquiry:open')) actions.push('open');
   // R06-9、R07-11：没取消、当前轮次还没评标完成都能取消
   const cancellable: InquiryDocStatus[] = [
     InquiryDocStatus.DRAFT,

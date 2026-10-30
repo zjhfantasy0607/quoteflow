@@ -3,9 +3,9 @@ import type {
   InquiryInviteeDto,
   InquiryRoundDto,
   InviteeCandidateDto,
-  QuoteResponseDto,
   QuoteStatus,
   RoundEvent,
+  RoundResponsesDto,
 } from '@quoteflow/shared';
 import { seedMaterialCategories } from '../prisma/seed-data/materials';
 import type { EmailType, Supplier, User } from '../src/generated/prisma/client';
@@ -857,8 +857,10 @@ describe('M07 邀请发布与邮件通知', () => {
       const zh = await quoteOf(detail.id, s.zh);
       await ctx.prisma.quote.update({ where: { id: zh.id }, data: { firstViewedAt: at(HOUR) } });
 
-      const list: QuoteResponseDto[] = (await buyer.get(`${base(detail.id)}/rounds/1/responses`).expect(200))
-        .body;
+      const { sealed, items: list }: RoundResponsesDto = (
+        await buyer.get(`${base(detail.id)}/rounds/1/responses`).expect(200)
+      ).body;
+      expect(sealed).toBe(true);
       expect(list.map((r) => [r.supplier.code, r.status, r.supplier.portalAccount])).toEqual([
         ['TS-BI', 'DECLINED', 'NONE'],
         ['TS-EN', 'INVITED', 'PENDING'],

@@ -92,6 +92,23 @@ export class InquiryNoticesService {
     }
   }
 
+  /** R10-5 开标：只发给进入评标的供应商；同一张报价单只发一次 */
+  async opening(
+    tx: Prisma.TransactionClient,
+    inquiry: NoticeInquiry,
+    quotes: NoticeQuote[],
+    data: { openedAt: Date },
+  ): Promise<void> {
+    const buyer = await this.buyer(tx, inquiry);
+    for (const q of quotes) {
+      await this.mail.enqueue(tx, {
+        ...this.envelope(inquiry, q, `OPENING:${q.id}`),
+        templateKey: 'opening',
+        data: { ...this.base(inquiry, q, buyer), ...data, link: this.link(q) },
+      });
+    }
+  }
+
   /** 采购联系人：询价负责人的姓名和邮箱（没有邮箱时只写姓名） */
   private async buyer(
     tx: Prisma.TransactionClient,

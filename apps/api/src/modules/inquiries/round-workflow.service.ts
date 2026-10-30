@@ -19,6 +19,7 @@ import { AuditService } from '../../infra/audit/audit.service';
 import { ParamsService } from '../../infra/params/params.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MaterialCategoriesService } from '../material-categories/material-categories.service';
+import { PointsService } from '../points/points.service';
 import { PplService } from '../ppl/ppl.service';
 import { InquiryAccessService } from './inquiry-access.service';
 import { InquiryNoticesService, type NoticeQuote } from './inquiry-notices.service';
@@ -29,7 +30,7 @@ const HOUR_MS = 3600_000;
 
 const codes = (suppliers: { code: string }[]) => suppliers.map((s) => s.code).join(', ');
 
-/** 当前轮次的发布、补充邀请、催报、延期（05 §3、M07 R07-3 ~ R07-10） */
+/** 当前轮次的发布、补充邀请、催报、延期（05 §3、M07 R07-3 ~ R07-10），提前截止与开标（M10 R10-2 ~ R10-5） */
 @Injectable()
 export class RoundWorkflowService {
   constructor(
@@ -40,6 +41,7 @@ export class RoundWorkflowService {
     private readonly notices: InquiryNoticesService,
     private readonly categories: MaterialCategoriesService,
     private readonly ppl: PplService,
+    private readonly points: PointsService,
     private readonly params: ParamsService,
     private readonly audit: AuditService,
     private readonly clock: ClockService,
@@ -212,6 +214,60 @@ export class RoundWorkflowService {
         previousDeadline: previous,
         deadline: input.deadline,
       });
+    });
+    return this.inquiries.detail(this.prisma, user, inquiryId);
+  }
+
+  /**
+   * R10-2：等待报价、全部报价单都已响应（已提交或已拒绝）时提前截止，之后供应商不能再改（R09-1）。
+   * 供应商提交前会给询价单加共享锁，和这里的行锁互斥，不会出现"检查完又有人改成未响应"
+   */
+  async closeEarly(user: AuthUser, inquiryId: string, roundNo: number): Promise<InquiryDetailDto> {
+    await this.prisma.$transaction(async (tx) => {
+      const { inquiry, round } = await this.lockCurrentRound(tx, user, inquiryId, roundNo, 'closeEarly');
+      const pending = await tx.quote.count({ where: { roundId: round.id, status: 'INVITED' } });
+      if (pending > 0) throw new AppException('ROUND_NOT_ALL_RESPONDED', { pending });
+      await this.roundState.apply(tx, round.id, 'closeEarly', {
+        data: { quotesClosedAt: this.clock.now(), closedEarly: true },
+        audit: { actor: user, summary: inquiry.formalNo!, detail: { roundNo } },
+      });
+    });
+    return this.inquiries.detail(this.prisma, user, inquiryId);
+  }
+
+  /**
+   * R10-3 ~ R10-5 开标：只有报价完成的轮次能开。同一事务：轮次 → OPENED（openedAt/By）、已提交的报价 → EVALUATING
+   * （未响应、已拒绝的不变）、结算积分、给进入评标的供应商发 opening 邮件、审计（不含金额）。
+   * 并发开标两次时第二次读到的已是 OPENED，返回 ROUND_INVALID_STATUS
+   */
+  async open(user: AuthUser, inquiryId: string, roundNo: number): Promise<InquiryDetailDto> {
+    await this.prisma.$transaction(async (tx) => {
+      const { inquiry, round } = await this.lockCurrentRound(tx, user, inquiryId, roundNo, 'open');
+      const now = this.clock.now();
+      const quotes = await tx.quote.findMany({
+        where: { roundId: round.id },
+        include: { supplier: true },
+        orderBy: { supplier: { code: 'asc' } },
+      });
+      const submitted = quotes.filter((q) => q.status === 'SUBMITTED');
+      await this.roundState.apply(tx, round.id, 'open', {
+        data: { openedAt: now, openedById: user.id },
+        audit: {
+          actor: user,
+          summary: [inquiry.formalNo, codes(submitted.map((q) => q.supplier))].filter(Boolean).join(' · '),
+          detail: {
+            roundNo,
+            evaluatingQuoteIds: submitted.map((q) => q.id),
+            noResponseQuoteIds: quotes.filter((q) => q.status === 'INVITED').map((q) => q.id),
+          },
+        },
+      });
+      await tx.quote.updateMany({
+        where: { roundId: round.id, status: 'SUBMITTED' },
+        data: { status: 'EVALUATING' },
+      });
+      await this.points.settleOpening(tx, round, quotes);
+      await this.notices.opening(tx, inquiry, submitted, { openedAt: now });
     });
     return this.inquiries.detail(this.prisma, user, inquiryId);
   }

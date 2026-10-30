@@ -47,6 +47,11 @@ export interface InquiryRoundSummaryDto {
   status: RoundStatus;
   deadline: string | null;
   publishedAt: string | null;
+  /** 截止任务或提前截止进入"报价完成"的时间（延期后清空） */
+  quotesClosedAt: string | null;
+  closedEarly: boolean;
+  openedAt: string | null;
+  evaluatedAt: string | null;
   lineCount: number;
 }
 
@@ -171,8 +176,8 @@ export interface InviteeCandidateDto extends InviteeSupplierDto {
 }
 
 /**
- * GET /api/inquiries/:id/rounds/:roundNo/responses 的一项。开标前只能看这些状态字段（05 §7.1 S-1），
- * 不含任何报价内容；M10 补开标后的合计
+ * "供应商响应"的一项（M07 §5、M10 §4）。密封时只有状态字段（05 §7.1 S-1），没有 totalAmount、currency 这两个键；
+ * 开标后（或有开标前查看授权）另含当前版本的合计
  */
 export interface QuoteResponseDto {
   /** 报价单 id（催报时提交） */
@@ -189,4 +194,20 @@ export interface QuoteResponseDto {
   declineReasonCode: string | null;
   declineReason: string | null;
   versionCount: number;
+  /**
+   * 当前版本的含税合计（2 位小数）。只有不密封时才有这个键；拒绝报价、没有版本、没有 quote.amount 时为 null
+   * （脱敏时 maskedFields 含 totalAmount，S-5）
+   */
+  totalAmount?: string | null;
+  /** 当前版本的币种（字典 currency），规则同 totalAmount */
+  currency?: string | null;
+  maskedFields?: string[];
+}
+
+/** GET /api/inquiries/:id/rounds/:roundNo/responses */
+export interface RoundResponsesDto {
+  /** 当前用户看不到报价内容（开标前且不在 seal.preOpenViewRoles 里，SealService 判定） */
+  sealed: boolean;
+  /** 按邀请时间、供应商编码排序 */
+  items: QuoteResponseDto[];
 }

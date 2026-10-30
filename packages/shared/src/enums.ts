@@ -125,6 +125,13 @@ export type AttachmentOwnerType = (typeof ATTACHMENT_OWNER_TYPES)[number];
 export const PORTAL_ACCOUNT_STATES = ['ACTIVE', 'PENDING', 'DISABLED', 'NONE'] as const;
 export type PortalAccountState = (typeof PORTAL_ACCOUNT_STATES)[number];
 
+/**
+ * 积分规则（SupplierPointsEntry.ruleCode，A-10）：开标时结算准时报价、快速响应、未响应（R10-4），
+ * 定标时 WON（M12），手工调整 MANUAL（M15）。分值取系统参数 points.rules
+ */
+export const POINTS_RULE_CODES = ['QUOTE_ON_TIME', 'FAST_RESPONSE', 'WON', 'NO_RESPONSE', 'MANUAL'] as const;
+export type PointsRuleCode = (typeof POINTS_RULE_CODES)[number];
+
 /** 供 api 测试与 Prisma 枚举比对 */
 export const DB_ENUMS = {
   UserType,

@@ -427,7 +427,7 @@ describe('M09 报价填报与版本', () => {
     expect(d).toMatchObject({ status: 'DECLINED', versionCount: 1, currentVersion: { versionNo: 1 } });
     const responses: QuoteResponseDto[] = (
       await buyer.get(`/api/inquiries/${p.inquiry.id}/rounds/1/responses`).expect(200)
-    ).body;
+    ).body.items;
     expect(responses.find((r) => r.id === p.b)).toMatchObject({
       status: 'DECLINED',
       declineReasonCode: 'PRICE',
@@ -620,7 +620,7 @@ describe('M09 报价填报与版本', () => {
     await submitQuote(portal.a, p.a, full(p, { unit_price_incl_tax: '3.3333' }), { remark: '机密备注' });
     const responses: QuoteResponseDto[] = (
       await buyer.get(`/api/inquiries/${p.inquiry.id}/rounds/1/responses`).expect(200)
-    ).body;
+    ).body.items;
     const text = JSON.stringify(responses);
     for (const secret of ['3.3333', '3333.30', '机密备注']) expect(text).not.toContain(secret);
     expect(responses.find((r) => r.id === p.a)).toMatchObject({ status: 'SUBMITTED', versionCount: 1 });

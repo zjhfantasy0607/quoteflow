@@ -1,6 +1,8 @@
-import type { PortalQuoteDetailDto } from '@quoteflow/shared';
+import type { InquiryDetailDto, PortalQuoteDetailDto } from '@quoteflow/shared';
 import type { Worksheet } from 'exceljs';
+import type { PrismaClient } from '../../src/generated/prisma/client';
 import type { Agent } from './auth';
+import { addManualLine, createDraftInquiry, publishRound } from './inquiries';
 import { loadXlsx } from './xlsx';
 
 /** PPL-LED（灯珠分类）的必填列：主模板的含税单价、税率、交期 + 变体改为必填的 4 列 */
@@ -14,6 +16,56 @@ export function ledValues(extra: Record<string, unknown> = {}): Record<string, u
     tax_rate: '13',
     lead_time_days: 30,
     ...extra,
+  };
+}
+
+/** publishLedInquiry() 的结果：quotes 按传入的供应商顺序，l1、l2 是两行询价行 */
+export interface PublishedLed {
+  inquiry: InquiryDetailDto;
+  roundId: string;
+  quotes: string[];
+  l1: string;
+  l2: string;
+}
+
+/**
+ * 建一张材料类别 LED-2835 的询价（冻结 PPL-LED）：两行手工行（数量 1000、500）→ 提交 → 审批 → 发布给 supplierIds。
+ * creator 要有 inquiry:create/submit/invite/publish，approver 要有 inquiry:approve
+ */
+export async function publishLedInquiry(
+  prisma: PrismaClient,
+  creator: Agent,
+  approver: Agent,
+  categoryId: string,
+  supplierIds: string[],
+  deadline: Date,
+  title = '灯珠询价',
+): Promise<PublishedLed> {
+  const draft = await createDraftInquiry(creator, categoryId, { title });
+  await addManualLine(creator, draft.id, categoryId, { nameZh: '灯珠 A', quantity: '1000' });
+  await addManualLine(creator, draft.id, categoryId, { nameZh: '灯珠 B', quantity: '500' });
+  await creator.post(`/api/inquiries/${draft.id}/submit`).expect(200);
+  await approver.post(`/api/inquiries/${draft.id}/approve`).send({}).expect(200);
+  const inquiry = await publishRound(creator, draft.id, supplierIds, deadline);
+  const quotes = await prisma.quote.findMany({ where: { round: { inquiryId: inquiry.id } } });
+  const lines = await prisma.inquiryLine.findMany({
+    where: { round: { inquiryId: inquiry.id } },
+    orderBy: { lineNo: 'asc' },
+  });
+  return {
+    inquiry,
+    roundId: quotes[0].roundId,
+    quotes: supplierIds.map((id) => quotes.find((q) => q.supplierId === id)!.id),
+    l1: lines[0].id,
+    l2: lines[1].id,
+  };
+}
+
+/** 两行都填齐 PPL-LED 必填列，含税单价分别为 price1、price2 */
+export function ledLines(p: { l1: string; l2: string }, price1: string, price2: string) {
+  return {
+    [p.l1]: ledValues({ unit_price_incl_tax: price1 }),
+    [p.l2]: ledValues({ unit_price_incl_tax: price2 }),
   };
 }
 

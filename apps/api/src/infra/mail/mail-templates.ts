@@ -35,6 +35,7 @@ export interface MailTemplateDataMap {
   reminder: SupplierNotice & { deadline: Date; link: string };
   'change.deadline': SupplierNotice & { previousDeadline: Date; deadline: Date; link: string };
   'change.cancel': SupplierNotice & { reason: string };
+  opening: SupplierNotice & { openedAt: Date; link: string };
 }
 
 /**
@@ -267,6 +268,30 @@ const cancelled: MailTemplate<MailTemplateDataMap['change.cancel']> = {
   },
 };
 
+/** 开标（R10-5）：只发给进入评标的供应商，不含任何金额、名次或其他供应商的信息 */
+const opening: MailTemplate<MailTemplateDataMap['opening']> = {
+  type: 'OPENING',
+  render(lang, d) {
+    const n = notice(lang, d);
+    const { formalNo, title } = d.inquiry;
+    const time = formatMailTime(d.openedAt, lang);
+    if (lang === 'zh-CN') {
+      const message = `询价 ${formalNo}（${title}）已于 ${time}开标，${n.supplier}的报价已进入评标阶段。评标期间采购人员可能就报价与贵司进一步沟通，评标结果将另行通知。感谢贵司参与报价。`;
+      return {
+        subject: `开标通知：${formalNo} ${title}`,
+        body: `${n.hello}<p>${esc(message)}</p>${button(d.link, '查看我的报价')}${n.contact}`,
+        text: `${n.helloText}\n\n${message}\n\n查看我的报价：${d.link}\n\n${n.contactText}`,
+      };
+    }
+    const message = `RFQ ${formalNo} (${title}) was opened at ${time}, and the quotation from ${n.supplier} is now under evaluation. Our purchasing team may contact you about your quotation during the evaluation, and you will be notified of the result separately. Thank you for your quotation.`;
+    return {
+      subject: `Bids opened: ${formalNo} ${title}`,
+      body: `${n.hello}<p>${esc(message)}</p>${button(d.link, 'View my quotation')}${n.contact}`,
+      text: `${n.helloText}\n\n${message}\n\nView my quotation: ${d.link}\n\n${n.contactText}`,
+    };
+  },
+};
+
 export const MAIL_TEMPLATES: { [K in MailTemplateKey]: MailTemplate<MailTemplateDataMap[K]> } = {
   'account.resetPassword': resetPassword,
   'account.activate': activate,
@@ -276,4 +301,5 @@ export const MAIL_TEMPLATES: { [K in MailTemplateKey]: MailTemplate<MailTemplate
   reminder,
   'change.deadline': deadlineChanged,
   'change.cancel': cancelled,
+  opening,
 };

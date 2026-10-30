@@ -160,16 +160,32 @@ describe('allowedActions（03 §6）', () => {
       'lateInvite',
       'remind',
       'extendDeadline',
+      'closeEarly',
       'cancel',
     ]);
   });
 
-  it('R07-10 报价完成后只能延期（和取消），不能补充邀请、催报', () => {
+  it('R07-10 R10-3 报价完成后只能延期、开标（和取消），不能补充邀请、催报', () => {
     expect(stateActions(ctx('APPROVED', 'QUOTES_CLOSED'), 'BUYER')).toEqual(['extendDeadline']);
     expect(stateActions(ctx('APPROVED', 'QUOTES_CLOSED'), 'PURCHASE_MANAGER')).toEqual([
       'extendDeadline',
+      'open',
       'cancel',
     ]);
+  });
+
+  it('R10-2 R10-3 R10-8 提前截止只在等待报价、开标只在报价完成时出现，都要 inquiry:open', () => {
+    const rounds = ['DRAFT', 'WAITING_QUOTES', 'QUOTES_CLOSED', 'OPENED', 'EVALUATED'] as const;
+    const has = (round: (typeof rounds)[number], role: string, action: string) =>
+      computeInquiryActions(ctx('APPROVED', round), perms(role)).includes(action as never);
+    expect(rounds.filter((r) => has(r, 'PURCHASE_MANAGER', 'closeEarly'))).toEqual(['WAITING_QUOTES']);
+    expect(rounds.filter((r) => has(r, 'PURCHASE_MANAGER', 'open'))).toEqual(['QUOTES_CLOSED']);
+    for (const round of rounds) {
+      expect(has(round, 'BUYER', 'closeEarly') || has(round, 'BUYER', 'open')).toBe(false);
+    }
+    expect(computeInquiryActions(ctx('CANCELLED', 'QUOTES_CLOSED'), perms('PURCHASE_MANAGER'))).not.toContain(
+      'open',
+    );
   });
 
   it('R07-11 发布后也能取消，评标完成后、已取消的不能', () => {

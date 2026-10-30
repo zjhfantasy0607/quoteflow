@@ -243,7 +243,7 @@ describe('M08 供应商门户与隔离', () => {
     expect(second.firstViewedAt).toBe(first.firstViewedAt);
     const responses: QuoteResponseDto[] = (
       await buyer.get(`/api/inquiries/${x.id}/rounds/1/responses`).expect(200)
-    ).body;
+    ).body.items;
     expect(responses[0].firstViewedAt).toBe(first.firstViewedAt);
   });
 
