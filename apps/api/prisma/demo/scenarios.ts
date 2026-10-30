@@ -1,20 +1,30 @@
 // 演示场景（docs/06-种子数据.md §3）。单据一律通过 service 方法创建，状态和不变量与真实操作一致。
-// 哪个模块完成就在这里补哪个场景：M06 → D1、D2。
+// 哪个模块完成就在这里补哪个场景：M06 → D1、D2；M09 → D3。
 import type { INestApplicationContext } from '@nestjs/common';
 import {
+  approveInquirySchema,
   attachInquiryFileSchema,
   createInquirySchema,
   createLineSchema,
   linesFromMaterialsSchema,
+  publishRoundSchema,
+  quoteFormSchema,
+  updateInviteesSchema,
   type InquiryFileKind,
 } from '@quoteflow/shared';
 import type { AuthUser } from '../../src/common/auth/auth-user';
 import { buildAuthUser, userWithRolesInclude } from '../../src/common/auth/session.service';
+import { ClockService } from '../../src/common/clock/clock.service';
+import { inAppTz } from '../../src/common/time';
 import { FilesService } from '../../src/infra/files/files.service';
 import { InquiriesService } from '../../src/modules/inquiries/inquiries.service';
 import { InquiryFilesService } from '../../src/modules/inquiries/inquiry-files.service';
+import { InquiryInviteesService } from '../../src/modules/inquiries/inquiry-invitees.service';
 import { InquiryLinesService } from '../../src/modules/inquiries/inquiry-lines.service';
 import { InquiryWorkflowService } from '../../src/modules/inquiries/inquiry-workflow.service';
+import { RoundWorkflowService } from '../../src/modules/inquiries/round-workflow.service';
+import { PortalQuotesService } from '../../src/modules/portal/portal-quotes.service';
+import { QuoteSubmissionService } from '../../src/modules/portal/quote-submission.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { demoPdf, demoPng } from './demo-files';
 
@@ -169,4 +179,203 @@ export async function seedD2(ctx: DemoContext): Promise<string> {
   // 提交审批：给采购主管 manager.zhang 发 approval.request（开发环境进 Mailpit）
   await ctx.app.get(InquiryWorkflowService).submit(pd, inquiry.id);
   return inquiry.draftNo;
+}
+
+const HOUR_MS = 3600_000;
+const DAY_MS = 24 * HOUR_MS;
+
+/** 供应商门户账号（06 §2.8：用户名就是联系邮箱，seed 里已激活） */
+async function supplierActor(ctx: DemoContext, supplierCode: string): Promise<AuthUser> {
+  const user = await ctx.prisma.user.findFirst({
+    where: { supplier: { code: supplierCode }, userType: 'SUPPLIER', status: 'ACTIVE' },
+    include: userWithRolesInclude,
+  });
+  if (!user)
+    throw new Error(`seed-demo: portal account of ${supplierCode} not found, run "npm run db:seed" first`);
+  return buildAuthUser(user, 'seed-demo', { ip: null, userAgent: null });
+}
+
+/** 把时钟拨到"现在 + offsetMs"（负数 = 过去）执行 run，结束后拨回（06 §1） */
+async function atOffset<T>(ctx: DemoContext, offsetMs: number, run: () => Promise<T>): Promise<T> {
+  const clock = ctx.app.get(ClockService);
+  clock.setOffset(offsetMs);
+  try {
+    return await run();
+  } finally {
+    clock.setOffset(0);
+  }
+}
+
+/** D3 两行报价（PPL-PERIPH 的必填列：含税单价、税率、交期、材质） */
+function d3Values(prices: [string, string]): Record<string, Record<string, unknown>> {
+  const common = {
+    tax_rate: '13',
+    moq: 5000,
+    price_valid_until: '2027-03-31',
+    payment_terms: 'NET30',
+    sample_lead_days: 7,
+    monthly_capacity: 200000,
+    warranty_months: 24,
+    rohs: true,
+    reach: true,
+    packing_method: 'CARTON',
+    trade_term: 'DAP',
+    ship_from: '广州',
+  };
+  return {
+    lens: {
+      ...common,
+      brand: '联创',
+      model: 'LC-L20-60',
+      material: 'PC（光学级）',
+      unit_price_incl_tax: prices[0],
+      lead_time_days: 25,
+      pcs_per_carton: 2000,
+      carton_l_cm: '40',
+      carton_w_cm: '30',
+      carton_h_cm: '25',
+      carton_gw_kg: '9.5',
+    },
+    reflector: {
+      ...common,
+      brand: '联创',
+      model: 'LC-R50-24',
+      material: '铝（阳极氧化）',
+      color_finish: '镜面银',
+      unit_price_incl_tax: prices[1],
+      lead_time_days: 30,
+      pcs_per_carton: 500,
+      carton_l_cm: '50',
+      carton_w_cm: '40',
+      carton_h_cm: '35',
+      carton_gw_kg: '12.8',
+    },
+  };
+}
+
+/**
+ * D3：PJ-2026-001 / 透镜与反光杯询价，等待报价（与 D1 同一项目，#1 一个项目多次询价）。
+ * 三天前建单审批、两天前发布给 SUP10005、SUP10006、SUP10003，截止在 3 天后（北京时间 18:00）；
+ * SUP10005 已提交 2 个版本（第 2 版降价），SUP10003 已拒绝（交期），SUP10006 看过但没响应
+ */
+export async function seedD3(ctx: DemoContext): Promise<string> {
+  const { pd, buyer, manager } = ctx.users;
+  const deadline = inAppTz(new Date()).add(3, 'day').hour(18).minute(0).second(0).millisecond(0).toDate();
+  const inquiry = await atOffset(ctx, -3 * DAY_MS, async () => {
+    const created = await ctx.app.get(InquiriesService).create(
+      buyer,
+      createInquirySchema.parse({
+        projectNo: 'PJ-2026-001',
+        title: '透镜与反光杯询价',
+        materialCategoryId: ctx.category.PER,
+        currency: 'CNY',
+        description: '配套 2835 灯珠模组（同项目 PJ-2026-001），透镜与反光杯同批交货，送货到深圳宝安工厂。',
+        ownerId: buyer.id,
+        pdUserId: pd.id,
+      }),
+    );
+    await ctx.app.get(InquiryLinesService).createFromMaterials(
+      buyer,
+      created.id,
+      1,
+      linesFromMaterialsSchema.parse({
+        items: [
+          { materialId: ctx.material['MAT-000003'], quantity: '20000' },
+          { materialId: ctx.material['MAT-000004'], quantity: '20000' },
+        ],
+      }),
+    );
+    const spec = await upload(
+      ctx,
+      buyer,
+      'SPEC_DOC',
+      '透镜与反光杯技术要求.pdf',
+      demoPdf([
+        'Lens & Reflector Requirements (demo)',
+        'Project: PJ-2026-001',
+        'Lens: PC optical grade, 60 deg, transmittance > 90%',
+        'Reflector: aluminium, anodized, 24 deg',
+      ]),
+    );
+    await ctx.app
+      .get(InquiryFilesService)
+      .attach(
+        buyer,
+        created.id,
+        1,
+        attachInquiryFileSchema.parse({ fileId: spec, kind: 'SPEC_DOC', lineId: null }),
+      );
+    const workflow = ctx.app.get(InquiryWorkflowService);
+    await workflow.submit(buyer, created.id);
+    return workflow.approve(manager, created.id, approveInquirySchema.parse({}));
+  });
+
+  const suppliers = await ctx.prisma.supplier.findMany({
+    where: { code: { in: ['SUP10005', 'SUP10006', 'SUP10003'] } },
+    select: { id: true, code: true },
+  });
+  await atOffset(ctx, -2 * DAY_MS, async () => {
+    await ctx.app
+      .get(InquiryInviteesService)
+      .replace(buyer, inquiry.id, updateInviteesSchema.parse({ supplierIds: suppliers.map((s) => s.id) }));
+    await ctx.app.get(RoundWorkflowService).publish(
+      buyer,
+      inquiry.id,
+      1,
+      publishRoundSchema.parse({
+        deadline: deadline.toISOString(),
+      }),
+    );
+  });
+
+  const quotes = await ctx.prisma.quote.findMany({
+    where: { round: { inquiryId: inquiry.id } },
+    select: { id: true, supplier: { select: { code: true } } },
+  });
+  const quoteOf = (code: string) => quotes.find((q) => q.supplier.code === code)!.id;
+  const lines = await ctx.prisma.inquiryLine.findMany({
+    where: { round: { inquiryId: inquiry.id } },
+    orderBy: { lineNo: 'asc' },
+    select: { id: true },
+  });
+  const portal = ctx.app.get(PortalQuotesService);
+  const submission = ctx.app.get(QuoteSubmissionService);
+  const form = (prices: [string, string], extra: Record<string, string> = {}) => {
+    const values = d3Values(prices);
+    return quoteFormSchema.parse({
+      lines: { [lines[0].id]: values.lens, [lines[1].id]: values.reflector },
+      ...extra,
+    });
+  };
+
+  const lianchuang = await supplierActor(ctx, 'SUP10005');
+  const xinneng = await supplierActor(ctx, 'SUP10003');
+  const brightSource = await supplierActor(ctx, 'SUP10006');
+  await atOffset(ctx, -44 * HOUR_MS, () => portal.detail(lianchuang, quoteOf('SUP10005')));
+  await atOffset(ctx, -40 * HOUR_MS, () =>
+    submission.submit(
+      lianchuang,
+      quoteOf('SUP10005'),
+      form(['0.45', '1.85'], { remark: '含税含运费，送货到深圳宝安。', changeNote: '首次报价' }),
+    ),
+  );
+  await atOffset(ctx, -30 * HOUR_MS, async () => {
+    await portal.detail(xinneng, quoteOf('SUP10003'));
+    await submission.decline(xinneng, quoteOf('SUP10003'), {
+      reasonCode: 'LEAD_TIME',
+      reason: '本月产线已排满，最早 45 天后才能交货，无法满足 30 天交期。',
+    });
+  });
+  await atOffset(ctx, -26 * HOUR_MS, () => portal.detail(brightSource, quoteOf('SUP10006')));
+  await atOffset(ctx, -3 * HOUR_MS, () =>
+    submission.submit(
+      lianchuang,
+      quoteOf('SUP10005'),
+      form(['0.42', '1.78'], {
+        remark: '含税含运费，送货到深圳宝安。',
+        changeNote: '原材料价格回落，两款统一下调单价。',
+      }),
+    ),
+  );
+  return inquiry.formalNo!;
 }
