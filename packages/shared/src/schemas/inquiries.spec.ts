@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { computeInquiryActions, isRoundEditable, type InquiryActionContext } from '../inquiry-actions';
 import { PRESET_ROLES } from '../roles';
+import { ROUND_TERMINAL_STATUSES, ROUND_TRANSITIONS } from '../status';
 import {
   copyLineFilesSchema,
   createInquirySchema,
   createLineSchema,
+  inviteeCandidatesQuerySchema,
+  lateInviteSchema,
+  publishRoundSchema,
   quantitySchema,
   rejectInquirySchema,
+  remindQuotesSchema,
+  updateInviteesSchema,
   updateLineSchema,
 } from './inquiries';
 
@@ -112,17 +118,18 @@ describe('R06-2 询价行', () => {
 });
 
 describe('allowedActions（03 §6）', () => {
-  it('草稿：PD、采购员可以编辑和提交；采购主管还能取消', () => {
+  it('草稿：PD、采购员可以编辑和提交，采购员还能维护受邀名单；采购主管还能取消', () => {
     expect(computeInquiryActions(ctx('DRAFT'), perms('PD'))).toEqual(['edit', 'submit']);
-    expect(computeInquiryActions(ctx('DRAFT'), perms('BUYER'))).toEqual(['edit', 'submit']);
+    expect(computeInquiryActions(ctx('DRAFT'), perms('BUYER'))).toEqual(['edit', 'submit', 'editInvitees']);
     expect(computeInquiryActions(ctx('DRAFT'), perms('PURCHASE_MANAGER'))).toEqual([
       'edit',
       'submit',
+      'editInvitees',
       'cancel',
     ]);
   });
 
-  it('待审批：只有采购主管能通过、驳回、取消', () => {
+  it('待审批：只有采购主管能通过、驳回、取消；R07-2 待审批时不能改受邀名单', () => {
     expect(computeInquiryActions(ctx('PENDING_APPROVAL'), perms('PD'))).toEqual([]);
     expect(computeInquiryActions(ctx('PENDING_APPROVAL'), perms('BUYER'))).toEqual([]);
     expect(computeInquiryActions(ctx('PENDING_APPROVAL'), perms('PURCHASE_MANAGER'))).toEqual([
@@ -132,17 +139,108 @@ describe('allowedActions（03 §6）', () => {
     ]);
   });
 
-  it('已通过、未发布：采购主管可以取消；发布后本模块不给取消（M07 扩展）', () => {
+  it('R07-2、R07-3 已通过、未发布：采购员维护名单和发布，采购主管还能取消', () => {
     expect(computeInquiryActions(ctx('APPROVED'), perms('PD'))).toEqual([]);
-    expect(computeInquiryActions(ctx('APPROVED'), perms('BUYER'))).toEqual([]);
-    expect(computeInquiryActions(ctx('APPROVED'), perms('PURCHASE_MANAGER'))).toEqual(['cancel']);
-    expect(computeInquiryActions(ctx('APPROVED', 'WAITING_QUOTES'), perms('PURCHASE_MANAGER'))).toEqual([]);
+    expect(computeInquiryActions(ctx('APPROVED'), perms('BUYER'))).toEqual(['editInvitees', 'publish']);
+    expect(computeInquiryActions(ctx('APPROVED'), perms('PURCHASE_MANAGER'))).toEqual([
+      'editInvitees',
+      'publish',
+      'cancel',
+    ]);
+  });
+
+  it('R07-7、R07-8、R07-10 等待报价：补充邀请、催报、延期；名单只读，不能再发布', () => {
+    expect(computeInquiryActions(ctx('APPROVED', 'WAITING_QUOTES'), perms('PD'))).toEqual([]);
+    expect(computeInquiryActions(ctx('APPROVED', 'WAITING_QUOTES'), perms('BUYER'))).toEqual([
+      'lateInvite',
+      'remind',
+      'extendDeadline',
+    ]);
+    expect(computeInquiryActions(ctx('APPROVED', 'WAITING_QUOTES'), perms('PURCHASE_MANAGER'))).toEqual([
+      'lateInvite',
+      'remind',
+      'extendDeadline',
+      'cancel',
+    ]);
+  });
+
+  it('R07-10 报价完成后只能延期（和取消），不能补充邀请、催报', () => {
+    expect(computeInquiryActions(ctx('APPROVED', 'QUOTES_CLOSED'), perms('BUYER'))).toEqual([
+      'extendDeadline',
+    ]);
+    expect(computeInquiryActions(ctx('APPROVED', 'QUOTES_CLOSED'), perms('PURCHASE_MANAGER'))).toEqual([
+      'extendDeadline',
+      'cancel',
+    ]);
+  });
+
+  it('R07-11 发布后也能取消，评标完成后、已取消的不能', () => {
+    expect(computeInquiryActions(ctx('APPROVED', 'OPENED'), perms('PURCHASE_MANAGER'))).toContain('cancel');
+    expect(computeInquiryActions(ctx('APPROVED', 'EVALUATED'), perms('PURCHASE_MANAGER'))).not.toContain(
+      'cancel',
+    );
     expect(computeInquiryActions(ctx('CANCELLED', 'CANCELLED'), perms('PURCHASE_MANAGER'))).toEqual([]);
+  });
+
+  it('只有管理员的查看权限时没有任何动作', () => {
+    for (const round of ['DRAFT', 'WAITING_QUOTES', 'QUOTES_CLOSED'] as const) {
+      expect(computeInquiryActions(ctx('APPROVED', round), perms('ADMIN'))).toEqual([]);
+    }
   });
 
   it('I-4 第 1 轮只在草稿时可以编辑', () => {
     expect(isRoundEditable('DRAFT', { roundNo: 1, status: 'DRAFT' })).toBe(true);
     expect(isRoundEditable('PENDING_APPROVAL', { roundNo: 1, status: 'DRAFT' })).toBe(false);
     expect(isRoundEditable('APPROVED', { roundNo: 1, status: 'DRAFT' })).toBe(false);
+  });
+});
+
+describe('R07-12 轮次状态流转表（05 §3）', () => {
+  it('发布只能从 DRAFT；延期可以从等待报价或报价完成回到等待报价', () => {
+    expect(ROUND_TRANSITIONS.publish).toEqual({ from: ['DRAFT'], to: 'WAITING_QUOTES' });
+    expect(ROUND_TRANSITIONS.extendDeadline).toEqual({
+      from: ['WAITING_QUOTES', 'QUOTES_CLOSED'],
+      to: 'WAITING_QUOTES',
+    });
+  });
+
+  it('终态不能再迁移到任何状态', () => {
+    for (const { from } of Object.values(ROUND_TRANSITIONS)) {
+      for (const terminal of ROUND_TERMINAL_STATUSES) expect(from).not.toContain(terminal);
+    }
+  });
+
+  it('取消覆盖全部非终态', () => {
+    expect([...ROUND_TRANSITIONS.cancel.from].sort()).toEqual(
+      ['DRAFT', 'OPENED', 'QUOTES_CLOSED', 'WAITING_QUOTES'].sort(),
+    );
+  });
+});
+
+describe('M07 受邀名单与发布', () => {
+  it('R07-1 候选筛选：分类多选逗号分隔、去重', () => {
+    const q = inviteeCandidatesQuerySchema.parse({
+      categoryCodes: 'STRATEGIC, EXCELLENT,STRATEGIC',
+      keyword: ' ',
+    });
+    expect(q).toMatchObject({ categoryCodes: ['STRATEGIC', 'EXCELLENT'], page: 1, pageSize: 20 });
+    expect(q.keyword).toBeUndefined();
+  });
+
+  it('受邀名单整体替换可以为空，供应商去重；补充邀请、催报至少一个', () => {
+    expect(updateInviteesSchema.parse({ supplierIds: [] }).supplierIds).toEqual([]);
+    expect(updateInviteesSchema.parse({ supplierIds: ['a', 'b', 'a'] }).supplierIds).toEqual(['a', 'b']);
+    expect(lateInviteSchema.safeParse({ supplierIds: [] }).success).toBe(false);
+    expect(remindQuotesSchema.safeParse({ quoteIds: [] }).success).toBe(false);
+    expect(remindQuotesSchema.parse({ quoteIds: ['q1', 'q1'] }).quoteIds).toEqual(['q1']);
+  });
+
+  it('截止时间接受 UTC 或带时区偏移的 ISO 8601，输出 Date', () => {
+    const utc = publishRoundSchema.parse({ deadline: '2026-11-20T09:00:00.000Z' }).deadline;
+    const offset = publishRoundSchema.parse({ deadline: '2026-11-20T17:00:00+08:00' }).deadline;
+    expect(utc).toBeInstanceOf(Date);
+    expect(offset.toISOString()).toBe(utc.toISOString());
+    expect(publishRoundSchema.safeParse({ deadline: '2026-11-20 17:00' }).success).toBe(false);
+    expect(publishRoundSchema.safeParse({}).success).toBe(false);
   });
 });

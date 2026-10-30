@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import {
   computeInquiryActions,
+  QUOTE_VOIDABLE_STATUSES,
+  ROUND_TRANSITIONS,
   type ApproveInquiryInput,
   type CancelInquiryInput,
   type InquiryAction,
@@ -19,6 +21,7 @@ import { MailService, userMailLanguage } from '../../infra/mail/mail.service';
 import { SequenceService } from '../../infra/sequences/sequence.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InquiryAccessService } from './inquiry-access.service';
+import { InquiryNoticesService } from './inquiry-notices.service';
 import { InquiriesService } from './inquiries.service';
 import { RoundStateService } from './round-state.service';
 
@@ -31,7 +34,7 @@ interface Recipient {
   locale: string;
 }
 
-/** 单据状态流转（05 §1）：提交审批、通过、驳回、取消（发布前） */
+/** 单据状态流转（05 §1）：提交审批、通过、驳回、取消 */
 @Injectable()
 export class InquiryWorkflowService {
   constructor(
@@ -39,6 +42,7 @@ export class InquiryWorkflowService {
     private readonly access: InquiryAccessService,
     private readonly inquiries: InquiriesService,
     private readonly roundState: RoundStateService,
+    private readonly notices: InquiryNoticesService,
     private readonly scope: ScopeService,
     private readonly sequences: SequenceService,
     private readonly mail: MailService,
@@ -170,8 +174,9 @@ export class InquiryWorkflowService {
   }
 
   /**
-   * R06-9：原因必填；本模块只处理第 1 轮未发布的情况（草稿、待审批、已通过待发布），
-   * 第 1 轮随询价单一起取消。发布后的取消（报价作废、通知供应商）由 M07 扩展
+   * R06-9、R07-11、05 §1：原因必填；当前轮次评标完成后不能取消。当前轮次和变更草稿轮次一起取消，
+   * 这些轮次的报价单 → VOID；发布过的，给受邀且没有拒绝的供应商发 change.cancel（含取消原因）。
+   * 进行中的议价由 M11 在这里补充关闭
    */
   async cancel(user: AuthUser, id: string, input: CancelInquiryInput): Promise<InquiryDetailDto> {
     if (!input.reason) throw new AppException('INQUIRY_CANCEL_REASON_REQUIRED');
@@ -183,17 +188,29 @@ export class InquiryWorkflowService {
         where: {
           id,
           docStatus: { in: ['DRAFT', 'PENDING_APPROVAL', 'APPROVED'] },
-          currentRoundNo: 1,
-          currentRoundStatus: 'DRAFT',
+          currentRoundStatus: { not: 'EVALUATED' },
         },
         data: { docStatus: 'CANCELLED', cancelledAt: this.clock.now(), cancelReason: reason },
       });
       if (res.count !== 1) throw new AppException('INQUIRY_INVALID_STATUS');
-      const round = await tx.inquiryRound.findUniqueOrThrow({
-        where: { inquiryId_roundNo: { inquiryId: id, roundNo: 1 } },
+      const rounds = await tx.inquiryRound.findMany({
+        where: { inquiryId: id, status: { in: [...ROUND_TRANSITIONS.cancel.from] } },
         select: { id: true },
+        orderBy: { roundNo: 'asc' },
       });
-      await this.roundState.transition(tx, round.id, ['DRAFT'], 'CANCELLED');
+      const roundIds = rounds.map((r) => r.id);
+      // 先取出要通知的（作废后就分不出谁拒绝过了）
+      const notify = await tx.quote.findMany({
+        where: { roundId: { in: roundIds }, status: { in: ['INVITED', 'SUBMITTED', 'EVALUATING'] } },
+        include: { supplier: true },
+        orderBy: { supplier: { code: 'asc' } },
+      });
+      const voided = await tx.quote.updateMany({
+        where: { roundId: { in: roundIds }, status: { in: [...QUOTE_VOIDABLE_STATUSES] } },
+        data: { status: 'VOID' },
+      });
+      for (const round of rounds) await this.roundState.apply(tx, round.id, 'cancel');
+      await this.notices.cancelled(tx, inquiry, notify, reason);
       await this.audit.log(
         {
           actor: user,
@@ -201,7 +218,7 @@ export class InquiryWorkflowService {
           entityType: 'inquiry',
           entityId: id,
           summary: inquiry.formalNo ?? inquiry.draftNo,
-          detail: { reason },
+          detail: { reason, voidedQuotes: voided.count },
         },
         tx,
       );

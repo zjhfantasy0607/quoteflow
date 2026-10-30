@@ -1007,18 +1007,18 @@ describe('M06 询价单与审批', () => {
       // 已取消的不能再取消，也不能提交
       await manager.post(`/api/inquiries/${draft.id}/cancel`).send({ reason: 'x' }).expect(409);
       await pd.post(`/api/inquiries/${draft.id}/submit`).expect(409);
-      // 第 1 轮已发布（M07 起）的取消由 M07 扩展，本模块拒绝
-      const published = await createApprovedInquiry(pd, manager, category.LED);
+      // 发布后的取消见 M07（invitations.e2e-spec）；当前轮次评标完成后不能取消（05 §1）
+      const evaluated = await createApprovedInquiry(pd, manager, category.LED);
       await ctx.prisma.inquiryRound.updateMany({
-        where: { inquiryId: published.id },
-        data: { status: 'WAITING_QUOTES' },
+        where: { inquiryId: evaluated.id },
+        data: { status: 'EVALUATED' },
       });
       await ctx.prisma.inquiry.update({
-        where: { id: published.id },
-        data: { currentRoundStatus: 'WAITING_QUOTES' },
+        where: { id: evaluated.id },
+        data: { currentRoundStatus: 'EVALUATED' },
       });
       expect(
-        (await manager.post(`/api/inquiries/${published.id}/cancel`).send({ reason: 'x' }).expect(409)).body
+        (await manager.post(`/api/inquiries/${evaluated.id}/cancel`).send({ reason: 'x' }).expect(409)).body
           .code,
       ).toBe('INQUIRY_INVALID_STATUS');
     });
@@ -1127,9 +1127,10 @@ describe('M06 询价单与审批', () => {
         pdUserId: users.pd.id,
       });
       const actions = async (agent: Agent) => (await detailOf(agent, draft.id)).allowedActions;
+      // M07 起采购员、采购主管在第 1 轮发布前还能维护受邀名单、审批通过后发布
       expect(await actions(pd)).toEqual(['edit', 'submit']);
-      expect(await actions(buyer)).toEqual(['edit', 'submit']);
-      expect(await actions(manager)).toEqual(['edit', 'submit', 'cancel']);
+      expect(await actions(buyer)).toEqual(['edit', 'submit', 'editInvitees']);
+      expect(await actions(manager)).toEqual(['edit', 'submit', 'editInvitees', 'cancel']);
 
       await addManualLine(pd, draft.id, category.LED);
       await pd.post(`/api/inquiries/${draft.id}/submit`).expect(200);
@@ -1139,10 +1140,14 @@ describe('M06 询价单与审批', () => {
 
       await manager.post(`/api/inquiries/${draft.id}/approve`).send({}).expect(200);
       expect(await actions(pd)).toEqual([]);
-      expect(await actions(buyer)).toEqual([]);
-      expect(await actions(manager)).toEqual(['cancel']);
+      expect(await actions(buyer)).toEqual(['editInvitees', 'publish']);
+      expect(await actions(manager)).toEqual(['editInvitees', 'publish', 'cancel']);
       // 轮次详情的 edit 与单据一致
-      expect((await roundOf(manager, draft.id)).allowedActions).toEqual(['cancel']);
+      expect((await roundOf(manager, draft.id)).allowedActions).toEqual([
+        'editInvitees',
+        'publish',
+        'cancel',
+      ]);
     });
   });
 });

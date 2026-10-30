@@ -22,13 +22,19 @@ import {
   copyLineFilesSchema,
   createInquirySchema,
   createLineSchema,
+  extendDeadlineSchema,
   inquiryListQuerySchema,
+  inviteeCandidatesQuerySchema,
+  lateInviteSchema,
   linesFromMaterialsSchema,
   pageQuerySchema,
+  publishRoundSchema,
   rejectInquirySchema,
+  remindQuotesSchema,
   reorderLinesSchema,
   roundNoSchema,
   updateInquirySchema,
+  updateInviteesSchema,
   updateLineSchema,
   type ApproveInquiryInput,
   type AttachInquiryFileInput,
@@ -37,21 +43,30 @@ import {
   type CopyLineFilesInput,
   type CreateInquiryInput,
   type CreateLineInput,
+  type ExtendDeadlineInput,
   type ImportResultDto,
   type InquiryApprovalDto,
   type InquiryDetailDto,
   type InquiryFileDto,
+  type InquiryInviteeDto,
   type InquiryLineDto,
   type InquiryListItemDto,
   type InquiryListQuery,
   type InquiryRoundDto,
   type InquiryUserOptionDto,
+  type InviteeCandidateDto,
+  type InviteeCandidatesQuery,
+  type LateInviteInput,
   type LinesFromMaterialsInput,
   type PageQuery,
   type Paginated,
+  type PublishRoundInput,
+  type QuoteResponseDto,
   type RejectInquiryInput,
+  type RemindQuotesInput,
   type ReorderLinesInput,
   type UpdateInquiryInput,
+  type UpdateInviteesInput,
   type UpdateLineInput,
 } from '@quoteflow/shared';
 import type { Response } from 'express';
@@ -63,18 +78,24 @@ import type { UploadedFileInput } from '../../infra/files/files.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MaterialCategoriesModule } from '../material-categories/material-categories.controller';
 import { MaterialsModule } from '../materials/materials.controller';
+import { PplModule } from '../ppl/ppl.controller';
+import { AutoReminderJob } from './auto-reminder.job';
 import { InquiryAccessService } from './inquiry-access.service';
 import { InquiryFileResolver } from './inquiry-file.resolver';
 import { InquiryFilesService } from './inquiry-files.service';
+import { InquiryInviteesService } from './inquiry-invitees.service';
 import { InquiryLinesExcelService } from './inquiry-lines-excel.service';
 import { InquiryLinesService } from './inquiry-lines.service';
+import { InquiryNoticesService } from './inquiry-notices.service';
 import { InquiryWorkflowService } from './inquiry-workflow.service';
 import { InquiriesService } from './inquiries.service';
+import { RoundResponsesService } from './round-responses.service';
 import { RoundStateService } from './round-state.service';
+import { RoundWorkflowService } from './round-workflow.service';
 
 const roundNoPipe = new ZodValidationPipe(roundNoSchema);
 
-/** M06 询价单与审批（docs/modules/M06 §4）。所有接口叠加数据权限，范围外的单据返回 404 */
+/** M06 询价单与审批、M07 邀请与发布（docs/modules/M06 §4、M07 §4）。所有接口叠加数据权限，范围外的单据返回 404 */
 @Controller('inquiries')
 export class InquiriesController {
   constructor(
@@ -84,6 +105,9 @@ export class InquiriesController {
     private readonly lines: InquiryLinesService,
     private readonly linesExcel: InquiryLinesExcelService,
     private readonly files: InquiryFilesService,
+    private readonly invitees: InquiryInviteesService,
+    private readonly rounds: RoundWorkflowService,
+    private readonly responses: RoundResponsesService,
   ) {}
 
   @RequirePermissions('inquiry:view')
@@ -199,6 +223,33 @@ export class InquiriesController {
     return this.inquiries.timeline(user, id);
   }
 
+  /** 受邀名单 + 门户账号状态（R07-6） */
+  @RequirePermissions('inquiry:view')
+  @Get(':id/invitees')
+  inviteeList(@CurrentUser() user: AuthUser, @Param('id') id: string): Promise<InquiryInviteeDto[]> {
+    return this.invitees.list(user, id);
+  }
+
+  @RequirePermissions('inquiry:invite')
+  @Get(':id/invitee-candidates')
+  candidates(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Query(new ZodValidationPipe(inviteeCandidatesQuerySchema)) query: InviteeCandidatesQuery,
+  ): Promise<Paginated<InviteeCandidateDto>> {
+    return this.invitees.candidates(user, id, query);
+  }
+
+  @RequirePermissions('inquiry:invite')
+  @Put(':id/invitees')
+  replaceInvitees(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updateInviteesSchema)) body: UpdateInviteesInput,
+  ): Promise<InquiryInviteeDto[]> {
+    return this.invitees.replace(user, id, body);
+  }
+
   @RequirePermissions('inquiry:view')
   @Get(':id/rounds/:roundNo')
   round(
@@ -207,6 +258,64 @@ export class InquiriesController {
     @Param('roundNo', roundNoPipe) roundNo: number,
   ): Promise<InquiryRoundDto> {
     return this.inquiries.roundDetail(this.prisma, user, id, roundNo);
+  }
+
+  @RequirePermissions('inquiry:publish')
+  @Post(':id/rounds/:roundNo/publish')
+  @HttpCode(200)
+  publish(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('roundNo', roundNoPipe) roundNo: number,
+    @Body(new ZodValidationPipe(publishRoundSchema)) body: PublishRoundInput,
+  ): Promise<InquiryDetailDto> {
+    return this.rounds.publish(user, id, roundNo, body);
+  }
+
+  @RequirePermissions('inquiry:invite')
+  @Post(':id/rounds/:roundNo/late-invite')
+  @HttpCode(200)
+  lateInvite(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('roundNo', roundNoPipe) roundNo: number,
+    @Body(new ZodValidationPipe(lateInviteSchema)) body: LateInviteInput,
+  ): Promise<InquiryDetailDto> {
+    return this.rounds.lateInvite(user, id, roundNo, body);
+  }
+
+  @RequirePermissions('inquiry:remind')
+  @Post(':id/rounds/:roundNo/remind')
+  @HttpCode(200)
+  remind(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('roundNo', roundNoPipe) roundNo: number,
+    @Body(new ZodValidationPipe(remindQuotesSchema)) body: RemindQuotesInput,
+  ): Promise<InquiryDetailDto> {
+    return this.rounds.remind(user, id, roundNo, body);
+  }
+
+  @RequirePermissions('inquiry:deadline')
+  @Put(':id/rounds/:roundNo/deadline')
+  extendDeadline(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('roundNo', roundNoPipe) roundNo: number,
+    @Body(new ZodValidationPipe(extendDeadlineSchema)) body: ExtendDeadlineInput,
+  ): Promise<InquiryDetailDto> {
+    return this.rounds.extendDeadline(user, id, roundNo, body);
+  }
+
+  /** 本模块只返回状态字段（开标前密封，05 §7.1 S-1） */
+  @RequirePermissions('inquiry:view')
+  @Get(':id/rounds/:roundNo/responses')
+  responseList(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('roundNo', roundNoPipe) roundNo: number,
+  ): Promise<QuoteResponseDto[]> {
+    return this.responses.list(user, id, roundNo);
   }
 
   @RequirePermissions('inquiry:create')
@@ -314,9 +423,12 @@ export class InquiriesController {
   }
 }
 
-/** M07 起导出 InquiryAccessService、RoundStateService、InquiryLinesService（M13 复用行与附件） */
+/**
+ * 导出给后续模块：InquiryAccessService、RoundStateService（M10 截止与开标、M12 定标、M13 变更轮次）、
+ * InquiryNoticesService（M13 的变更通知可以照着加）、InquiryLinesService / InquiryFilesService（M13 复用行与附件）
+ */
 @Module({
-  imports: [MaterialCategoriesModule, MaterialsModule],
+  imports: [MaterialCategoriesModule, MaterialsModule, PplModule],
   controllers: [InquiriesController],
   providers: [
     InquiryAccessService,
@@ -327,6 +439,11 @@ export class InquiriesController {
     InquiryLinesExcelService,
     InquiryFilesService,
     InquiryFileResolver,
+    InquiryInviteesService,
+    InquiryNoticesService,
+    RoundWorkflowService,
+    RoundResponsesService,
+    AutoReminderJob,
   ],
   exports: [
     InquiryAccessService,
@@ -334,6 +451,8 @@ export class InquiriesController {
     InquiriesService,
     InquiryLinesService,
     InquiryFilesService,
+    InquiryNoticesService,
+    AutoReminderJob,
   ],
 })
 export class InquiriesModule {}

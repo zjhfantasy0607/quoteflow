@@ -1,4 +1,12 @@
-import type { ApprovalAction, InquiryDocStatus, RoundStatus } from '../enums';
+import type {
+  ApprovalAction,
+  EnableStatus,
+  InquiryDocStatus,
+  PortalAccountState,
+  QuoteStatus,
+  RoundStatus,
+  SupplierLanguage,
+} from '../enums';
 import type { InquiryAction } from '../inquiry-actions';
 import type { InquiryFileKind } from '../schemas/inquiries';
 import type { InquiryDisplayStatus } from '../status';
@@ -128,4 +136,57 @@ export interface InquiryUserOptionDto {
   username: string;
   departmentCode: string | null;
   roleCodes: string[];
+}
+
+// ---------- 受邀名单、候选供应商与供应商响应（M07） ----------
+
+/** 受邀名单、候选供应商里的供应商（不含联系方式） */
+export interface InviteeSupplierDto {
+  id: string;
+  code: string;
+  nameZh: string;
+  nameEn: string | null;
+  /** 字典 supplier_category */
+  categoryCode: string;
+  /** 主营材料分类，按编码排序 */
+  materialCategories: MaterialCategoryBriefDto[];
+  /** 决定邮件语言（R07-5） */
+  preferredLanguage: SupplierLanguage;
+  /** 停用的供应商不能新邀请（R04-6），已在名单里的发布时被拒（R07-3） */
+  status: EnableStatus;
+  portalAccount: PortalAccountState;
+}
+
+/** GET /api/inquiries/:id/invitees，按加入时间、供应商编码排序 */
+export interface InquiryInviteeDto {
+  supplier: InviteeSupplierDto;
+  addedBy: UserBriefDto;
+  addedAt: string;
+}
+
+/** GET /api/inquiries/:id/invitee-candidates 的一项（只含启用的供应商） */
+export interface InviteeCandidateDto extends InviteeSupplierDto {
+  /** 已在受邀名单里（R07-1 标记出来） */
+  invited: boolean;
+}
+
+/**
+ * GET /api/inquiries/:id/rounds/:roundNo/responses 的一项。开标前只能看这些状态字段（05 §7.1 S-1），
+ * 不含任何报价内容；M10 补开标后的合计
+ */
+export interface QuoteResponseDto {
+  /** 报价单 id（催报时提交） */
+  id: string;
+  supplier: Pick<InviteeSupplierDto, 'id' | 'code' | 'nameZh' | 'nameEn' | 'portalAccount'>;
+  status: QuoteStatus;
+  invitedAt: string;
+  firstViewedAt: string | null;
+  /** 首次提交或拒绝的时间 */
+  respondedAt: string | null;
+  lastSubmittedAt: string | null;
+  declinedAt: string | null;
+  /** 字典 decline_reason */
+  declineReasonCode: string | null;
+  declineReason: string | null;
+  versionCount: number;
 }

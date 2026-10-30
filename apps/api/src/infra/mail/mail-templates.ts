@@ -31,6 +31,21 @@ export interface MailTemplateDataMap {
     comment: string | null;
     link: string;
   };
+  invitation: SupplierNotice & { deadline: Date; lineCount: number; link: string };
+  reminder: SupplierNotice & { deadline: Date; link: string };
+  'change.deadline': SupplierNotice & { previousDeadline: Date; deadline: Date; link: string };
+  'change.cancel': SupplierNotice & { reason: string };
+}
+
+/**
+ * 发给供应商的询价通知（M07）：只有正式询价号和标题，不含项目号、其他供应商、任何金额（R07-5）。
+ * contactName 是供应商联系人，buyer 是采购联系人（询价负责人）
+ */
+export interface SupplierNotice {
+  contactName: string;
+  supplier: { nameZh: string; nameEn: string | null };
+  inquiry: { formalNo: string; title: string };
+  buyer: { name: string; email: string | null };
 }
 
 export type MailTemplateKey = keyof MailTemplateDataMap;
@@ -126,9 +141,139 @@ const approvalResult: MailTemplate<MailTemplateDataMap['approval.result']> = {
   },
 };
 
+/** 供应商通知的公共部分：称呼、供应商名称、采购联系人 */
+function notice(lang: MailLang, d: SupplierNotice) {
+  const { name, email } = d.buyer;
+  if (lang === 'zh-CN') {
+    const contact = `采购联系人：${name}${email ? `（${email}）` : ''}`;
+    return {
+      hello: `<p>${esc(d.contactName)}，您好：</p>`,
+      helloText: `${d.contactName}，您好：`,
+      supplier: d.supplier.nameZh,
+      contact: `<p>${esc(contact)}</p>`,
+      contactText: contact,
+    };
+  }
+  const contact = `Purchasing contact: ${name}${email ? ` (${email})` : ''}`;
+  return {
+    hello: `<p>Dear ${esc(d.contactName)},</p>`,
+    helloText: `Dear ${d.contactName},`,
+    supplier: d.supplier.nameEn ?? d.supplier.nameZh,
+    contact: `<p>${esc(contact)}</p>`,
+    contactText: contact,
+  };
+}
+
+/** 询价邀请（R07-4、R07-5）：发布或补充邀请时每家一封，链接直达门户里的报价单 */
+const invitation: MailTemplate<MailTemplateDataMap['invitation']> = {
+  type: 'INVITATION',
+  render(lang, d, ctx) {
+    const n = notice(lang, d);
+    const { formalNo, title } = d.inquiry;
+    const deadline = formatMailTime(d.deadline, lang);
+    if (lang === 'zh-CN') {
+      const intro = `${ctx.company.nameZh}诚邀${n.supplier}参加以下询价，请在报价截止前登录供应商门户在线报价；如不参与，也请在门户中回复"拒绝报价"。`;
+      const noAccount = '如果贵司还没有门户账号或无法登录，请联系采购联系人。';
+      return {
+        subject: `询价邀请：${formalNo} ${title}`,
+        body: `${n.hello}<p>${esc(intro)}</p><ul><li>询价单号：${esc(formalNo)}</li><li>标题：${esc(title)}</li><li>询价明细：${d.lineCount} 行</li><li>报价截止：${esc(deadline)}</li></ul>${button(d.link, '查看询价并报价')}${n.contact}<p>${noAccount}</p>`,
+        text: `${n.helloText}\n\n${intro}\n询价单号：${formalNo}\n标题：${title}\n询价明细：${d.lineCount} 行\n报价截止：${deadline}\n\n查看询价并报价：${d.link}\n\n${n.contactText}\n${noAccount}`,
+      };
+    }
+    const intro = `${ctx.company.nameEn} invites ${n.supplier} to quote for the RFQ below. Please sign in to the supplier portal and submit your quotation before the deadline. If you will not quote, please decline it in the portal.`;
+    const noAccount =
+      'If you do not have a portal account yet or cannot sign in, please contact the purchasing contact.';
+    const lines = `${d.lineCount} ${d.lineCount === 1 ? 'line' : 'lines'}`;
+    return {
+      subject: `Request for quotation: ${formalNo} ${title}`,
+      body: `${n.hello}<p>${esc(intro)}</p><ul><li>RFQ No.: ${esc(formalNo)}</li><li>Title: ${esc(title)}</li><li>Items: ${lines}</li><li>Quotation deadline: ${esc(deadline)}</li></ul>${button(d.link, 'View RFQ and quote')}${n.contact}<p>${noAccount}</p>`,
+      text: `${n.helloText}\n\n${intro}\nRFQ No.: ${formalNo}\nTitle: ${title}\nItems: ${lines}\nQuotation deadline: ${deadline}\n\nView RFQ and quote: ${d.link}\n\n${n.contactText}\n${noAccount}`,
+    };
+  },
+};
+
+/** 催报（R07-8 手动、R07-9 截止前自动）：只发给还没有提交也没有拒绝的供应商 */
+const reminder: MailTemplate<MailTemplateDataMap['reminder']> = {
+  type: 'REMINDER',
+  render(lang, d) {
+    const n = notice(lang, d);
+    const { formalNo, title } = d.inquiry;
+    const deadline = formatMailTime(d.deadline, lang);
+    if (lang === 'zh-CN') {
+      const message = `询价 ${formalNo}（${title}）将于 ${deadline}截止，我们还没有收到${n.supplier}的报价或回复。请尽快登录供应商门户报价；如不参与本次报价，也请在门户中回复"拒绝报价"。`;
+      return {
+        subject: `报价提醒：${formalNo} ${title}`,
+        body: `${n.hello}<p>${esc(message)}</p>${button(d.link, '立即报价')}${n.contact}`,
+        text: `${n.helloText}\n\n${message}\n\n立即报价：${d.link}\n\n${n.contactText}`,
+      };
+    }
+    const message = `RFQ ${formalNo} (${title}) closes at ${deadline}, and we have not yet received a quotation or reply from ${n.supplier}. Please sign in to the supplier portal and quote as soon as possible. If you will not quote, please decline it in the portal.`;
+    return {
+      subject: `Quotation reminder: ${formalNo} ${title}`,
+      body: `${n.hello}<p>${esc(message)}</p>${button(d.link, 'Quote now')}${n.contact}`,
+      text: `${n.helloText}\n\n${message}\n\nQuote now: ${d.link}\n\n${n.contactText}`,
+    };
+  },
+};
+
+/** 延期（R07-10）：发给受邀且没有拒绝的供应商 */
+const deadlineChanged: MailTemplate<MailTemplateDataMap['change.deadline']> = {
+  type: 'CHANGE',
+  render(lang, d) {
+    const n = notice(lang, d);
+    const { formalNo, title } = d.inquiry;
+    const before = formatMailTime(d.previousDeadline, lang);
+    const after = formatMailTime(d.deadline, lang);
+    if (lang === 'zh-CN') {
+      const message = `询价 ${formalNo}（${title}）的报价截止时间已由 ${before}调整为 ${after}。已提交的报价继续有效，截止前仍可修改；还没有报价的，请在新的截止时间前完成。`;
+      return {
+        subject: `截止时间变更：${formalNo} ${title}`,
+        body: `${n.hello}<p>${esc(message)}</p>${button(d.link, '查看询价')}${n.contact}`,
+        text: `${n.helloText}\n\n${message}\n\n查看询价：${d.link}\n\n${n.contactText}`,
+      };
+    }
+    const message = `The quotation deadline of RFQ ${formalNo} (${title}) has been changed from ${before} to ${after}. Quotations already submitted remain valid and can still be revised before the deadline; if you have not quoted yet, please do so before the new deadline.`;
+    return {
+      subject: `Deadline changed: ${formalNo} ${title}`,
+      body: `${n.hello}<p>${esc(message)}</p>${button(d.link, 'View RFQ')}${n.contact}`,
+      text: `${n.helloText}\n\n${message}\n\nView RFQ: ${d.link}\n\n${n.contactText}`,
+    };
+  },
+};
+
+/** 发布后取消询价（R07-11）：发给受邀且没有拒绝的供应商，带取消原因 */
+const cancelled: MailTemplate<MailTemplateDataMap['change.cancel']> = {
+  type: 'CHANGE',
+  render(lang, d, ctx) {
+    const n = notice(lang, d);
+    const { formalNo, title } = d.inquiry;
+    if (lang === 'zh-CN') {
+      const message = `${ctx.company.nameZh}已取消询价 ${formalNo}（${title}），取消原因：${d.reason}`;
+      const after = '本询价不再接受报价，贵司提交的报价（如有）已作废，无需再处理。感谢贵司的支持。';
+      return {
+        subject: `询价取消：${formalNo} ${title}`,
+        body: `${n.hello}<p>${esc(message)}</p><p>${after}</p>${n.contact}`,
+        text: `${n.helloText}\n\n${message}\n${after}\n\n${n.contactText}`,
+      };
+    }
+    const message = `${ctx.company.nameEn} has cancelled RFQ ${formalNo} (${title}). Reason: ${d.reason}`;
+    const after =
+      'The RFQ no longer accepts quotations and any quotation you submitted is void; no further action is needed. Thank you for your support.';
+    return {
+      subject: `RFQ cancelled: ${formalNo} ${title}`,
+      body: `${n.hello}<p>${esc(message)}</p><p>${after}</p>${n.contact}`,
+      text: `${n.helloText}\n\n${message}\n${after}\n\n${n.contactText}`,
+    };
+  },
+};
+
 export const MAIL_TEMPLATES: { [K in MailTemplateKey]: MailTemplate<MailTemplateDataMap[K]> } = {
   'account.resetPassword': resetPassword,
   'account.activate': activate,
   'approval.request': approvalRequest,
   'approval.result': approvalResult,
+  invitation,
+  reminder,
+  'change.deadline': deadlineChanged,
+  'change.cancel': cancelled,
 };

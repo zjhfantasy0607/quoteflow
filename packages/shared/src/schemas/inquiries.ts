@@ -1,7 +1,14 @@
 import { z } from 'zod';
 import { Dec } from '../decimal';
 import { INQUIRY_TABS } from '../status';
-import { dateQueryParam, idSchema, optionalText, pageQuerySchema, requiredText } from './common';
+import {
+  commaListParam,
+  dateQueryParam,
+  idSchema,
+  optionalText,
+  pageQuerySchema,
+  requiredText,
+} from './common';
 
 const unique = <T>(list: T[]) => [...new Set(list)];
 
@@ -157,3 +164,48 @@ export const copyLineFilesSchema = z.object({
   kind: z.enum(INQUIRY_FILE_KINDS).optional(),
 });
 export type CopyLineFilesInput = z.infer<typeof copyLineFilesSchema>;
+
+// ---------- 受邀名单、发布与通知（M07） ----------
+
+/** 一张询价单最多邀请多少家供应商；催报一次最多选多少张报价单 */
+export const MAX_INVITEES = 200;
+
+/** R07-1 候选供应商（只含启用的）；主营材料分类包含下级，前端默认填询价单的材料类别，可以清空 */
+export const inviteeCandidatesQuerySchema = pageQuerySchema.extend({
+  /** 供应商分类，可多选，逗号分隔（战略 / 优秀 / 普通，#3） */
+  categoryCodes: commaListParam.optional(),
+  materialCategoryId: idSchema.optional(),
+  /** 匹配编码、中英文名称、联系人 */
+  keyword: optionalText(100),
+});
+export type InviteeCandidatesQuery = z.infer<typeof inviteeCandidatesQuerySchema>;
+export type InviteeCandidatesParams = z.input<typeof inviteeCandidatesQuerySchema>;
+
+/** PUT .../invitees：整体替换受邀名单（可以清空）；新加入的供应商必须启用 */
+export const updateInviteesSchema = z.object({
+  supplierIds: z.array(idSchema).max(MAX_INVITEES).transform(unique),
+});
+export type UpdateInviteesInput = z.infer<typeof updateInviteesSchema>;
+
+/** 截止时间：ISO 8601（UTC 或带时区偏移）。界面按 UTC+8 选择，提交时转成 UTC */
+export const deadlineSchema = z.iso.datetime({ offset: true }).transform((v) => new Date(v));
+
+/** R07-3：截止 ≥ 现在 + inquiry.minDeadlineHours（服务端校验） */
+export const publishRoundSchema = z.object({ deadline: deadlineSchema });
+export type PublishRoundInput = z.infer<typeof publishRoundSchema>;
+
+/** R07-10：新截止 > max(原截止, 现在 + inquiry.minDeadlineHours)（服务端校验） */
+export const extendDeadlineSchema = z.object({ deadline: deadlineSchema });
+export type ExtendDeadlineInput = z.infer<typeof extendDeadlineSchema>;
+
+/** R07-7 补充邀请：本轮已邀请的供应商跳过 */
+export const lateInviteSchema = z.object({
+  supplierIds: z.array(idSchema).min(1).max(MAX_INVITEES).transform(unique),
+});
+export type LateInviteInput = z.infer<typeof lateInviteSchema>;
+
+/** R07-8 手动催报：只能选未响应（INVITED）的报价单 */
+export const remindQuotesSchema = z.object({
+  quoteIds: z.array(idSchema).min(1).max(MAX_INVITEES).transform(unique),
+});
+export type RemindQuotesInput = z.infer<typeof remindQuotesSchema>;

@@ -118,6 +118,13 @@ export type FileKind = (typeof FILE_KINDS)[number];
 export const ATTACHMENT_OWNER_TYPES = ['QUOTE_VERSION', 'NEGOTIATION_MESSAGE', 'CONTRACT'] as const;
 export type AttachmentOwnerType = (typeof ATTACHMENT_OWNER_TYPES)[number];
 
+/**
+ * 门户账号状态（R07-6）：ACTIVE 有可登录的账号；PENDING 只有待激活的；DISABLED 账号都已停用；
+ * NONE 没开通。不是 ACTIVE 的供应商收得到邀请邮件，但登录不了门户
+ */
+export const PORTAL_ACCOUNT_STATES = ['ACTIVE', 'PENDING', 'DISABLED', 'NONE'] as const;
+export type PortalAccountState = (typeof PORTAL_ACCOUNT_STATES)[number];
+
 /** 供 api 测试与 Prisma 枚举比对 */
 export const DB_ENUMS = {
   UserType,

@@ -105,8 +105,11 @@ export async function createSupplier(
   options: {
     code?: string;
     nameZh?: string;
+    nameEn?: string | null;
     categoryCode?: string;
+    contactName?: string;
     contactEmail?: string;
+    ccEmails?: string[];
     preferredLanguage?: string;
     status?: EnableStatus;
     materialCategoryIds?: string[];
@@ -117,10 +120,11 @@ export async function createSupplier(
     data: {
       code: options.code ?? `TS-${String(supplierSeq).padStart(4, '0')}`,
       nameZh: options.nameZh ?? `测试供应商 ${supplierSeq}`,
+      nameEn: options.nameEn ?? null,
       categoryCode: options.categoryCode ?? 'NORMAL',
-      contactName: `联系人 ${supplierSeq}`,
+      contactName: options.contactName ?? `联系人 ${supplierSeq}`,
       contactEmail: options.contactEmail ?? `contact${supplierSeq}@supplier.example.com`,
-      ccEmails: [],
+      ccEmails: options.ccEmails ?? [],
       preferredLanguage: options.preferredLanguage ?? 'zh-CN',
       status: options.status ?? 'ENABLED',
       materialCategories: { create: (options.materialCategoryIds ?? []).map((categoryId) => ({ categoryId })) },

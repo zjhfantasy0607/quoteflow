@@ -58,6 +58,21 @@ export class EmailsController {
   @Get()
   async list(@Query(new ZodValidationPipe(emailListQuerySchema)) q: EmailListQuery): Promise<Paginated<EmailListItemDto>> {
     const keyword = q.keyword?.toLowerCase();
+    // 关键字也匹配询价单的草稿号、正式询价号（M07 §5：按询价单号筛到这张单的全部邮件）
+    const inquiryIds = keyword
+      ? (
+          await this.prisma.inquiry.findMany({
+            where: {
+              OR: [
+                { draftNo: { contains: keyword, mode: 'insensitive' } },
+                { formalNo: { contains: keyword, mode: 'insensitive' } },
+              ],
+            },
+            select: { id: true },
+            take: 100,
+          })
+        ).map((i) => i.id)
+      : [];
     const where: Prisma.EmailMessageWhereInput = {
       ...(q.type ? { type: q.type } : {}),
       ...(q.status ? { status: q.status } : {}),
@@ -65,7 +80,13 @@ export class EmailsController {
       ...(q.inquiryId ? { inquiryId: q.inquiryId } : {}),
       ...(dateRangeWhere(q.from, q.to) ? { createdAt: dateRangeWhere(q.from, q.to) } : {}),
       ...(keyword
-        ? { OR: [{ subject: { contains: keyword, mode: 'insensitive' } }, { toAddresses: { has: keyword } }] }
+        ? {
+            OR: [
+              { subject: { contains: keyword, mode: 'insensitive' } },
+              { toAddresses: { has: keyword } },
+              ...(inquiryIds.length ? [{ inquiryId: { in: inquiryIds } }] : []),
+            ],
+          }
         : {}),
     };
     const [rows, total] = await Promise.all([

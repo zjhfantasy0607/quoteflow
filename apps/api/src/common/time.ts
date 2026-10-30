@@ -16,3 +16,8 @@ export function formatMailTime(date: Date | string, lang: 'zh-CN' | 'en-US'): st
   const text = inAppTz(date).format('YYYY-MM-DD HH:mm');
   return lang === 'zh-CN' ? `${text}（北京时间 ${APP_TZ_LABEL}）` : `${text} (Beijing Time, ${APP_TZ_LABEL})`;
 }
+
+/** 不分语言的场合（审计摘要）：2026-11-20 17:00 UTC+8 */
+export function formatAppTime(date: Date | string): string {
+  return `${inAppTz(date).format('YYYY-MM-DD HH:mm')} ${APP_TZ_LABEL}`;
+}

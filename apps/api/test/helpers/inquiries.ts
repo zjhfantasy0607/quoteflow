@@ -59,3 +59,24 @@ export async function createApprovedInquiry(
   await creator.post(`/api/inquiries/${draft.id}/submit`).expect(200);
   return (await approver.post(`/api/inquiries/${draft.id}/approve`).send({}).expect(200)).body;
 }
+
+/** 整体替换受邀名单（第 1 轮发布前） */
+export async function setInvitees(agent: Agent, inquiryId: string, supplierIds: string[]): Promise<void> {
+  await agent.put(`/api/inquiries/${inquiryId}/invitees`).send({ supplierIds }).expect(200);
+}
+
+/** 设好受邀名单后发布第 1 轮（询价单要已审批通过） */
+export async function publishRound(
+  agent: Agent,
+  inquiryId: string,
+  supplierIds: string[],
+  deadline: Date,
+): Promise<InquiryDetailDto> {
+  await setInvitees(agent, inquiryId, supplierIds);
+  return (
+    await agent
+      .post(`/api/inquiries/${inquiryId}/rounds/1/publish`)
+      .send({ deadline: deadline.toISOString() })
+      .expect(200)
+  ).body;
+}

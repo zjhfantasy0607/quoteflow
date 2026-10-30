@@ -52,28 +52,44 @@ export function isRoundEditable(
 }
 
 /**
- * 按 05 §1 的状态表和功能权限算出当前用户可以执行的动作；动作接口用同一个函数复核，
+ * 按 05 §1、§3 的状态表和功能权限算出当前用户可以执行的动作；动作接口用同一个函数复核，
  * 保证"按钮显示"和"接口放行"一致。数据权限不在这里判断（范围外的单据直接 404）。
- * M06 覆盖 edit、submit、approve、reject 和发布前的 cancel，其余动作由 M07 起的模块补充。
+ * 轮次类动作（发布、补充邀请、催报、延期）都针对当前轮次。
+ * M06 覆盖 edit、submit、approve、reject、发布前的 cancel；M07 覆盖 editInvitees、publish、lateInvite、
+ * remind、extendDeadline 和发布后的 cancel；其余动作由 M10 起的模块补充。
  */
 export function computeInquiryActions(ctx: InquiryActionContext, perms: PermissionChecker): InquiryAction[] {
   const can = (code: PermissionCode) => perms.has(code);
   const actions: InquiryAction[] = [];
   const draft = ctx.docStatus === InquiryDocStatus.DRAFT;
+  const approved = ctx.docStatus === InquiryDocStatus.APPROVED;
+  const unpublished = firstRoundUnpublished(ctx);
+  const round = ctx.currentRoundStatus;
 
   // 编辑页包含表头、询价行（inquiry:create）和附件（inquiry:spec），有其一即可进入
-  if (draft && firstRoundUnpublished(ctx) && (can('inquiry:create') || can('inquiry:spec')))
-    actions.push('edit');
+  if (draft && unpublished && (can('inquiry:create') || can('inquiry:spec'))) actions.push('edit');
   if (draft && can('inquiry:submit')) actions.push('submit');
   if (ctx.docStatus === InquiryDocStatus.PENDING_APPROVAL && can('inquiry:approve'))
     actions.push('approve', 'reject');
-  // R06-9：本模块只覆盖第 1 轮发布前的取消，发布后的取消由 M07 扩展
+  // R07-2：第 1 轮发布前（草稿或已通过，待审批时不能改）可以维护受邀名单；变更轮次草稿期间的维护由 M13 补充
+  if ((draft || approved) && unpublished && can('inquiry:invite')) actions.push('editInvitees');
+  // R07-3：审批通过后才能发布
+  if (approved && unpublished && can('inquiry:publish')) actions.push('publish');
+  // R07-7、R07-8：补充邀请、催报只在等待报价时
+  if (approved && round === RoundStatus.WAITING_QUOTES) {
+    if (can('inquiry:invite')) actions.push('lateInvite');
+    if (can('inquiry:remind')) actions.push('remind');
+  }
+  // R07-10：报价完成后也能延期，回到等待报价
+  const extendable: RoundStatus[] = [RoundStatus.WAITING_QUOTES, RoundStatus.QUOTES_CLOSED];
+  if (approved && extendable.includes(round) && can('inquiry:deadline')) actions.push('extendDeadline');
+  // R06-9、R07-11：没取消、当前轮次还没评标完成都能取消
   const cancellable: InquiryDocStatus[] = [
     InquiryDocStatus.DRAFT,
     InquiryDocStatus.PENDING_APPROVAL,
     InquiryDocStatus.APPROVED,
   ];
-  if (cancellable.includes(ctx.docStatus) && firstRoundUnpublished(ctx) && can('inquiry:cancel'))
+  if (cancellable.includes(ctx.docStatus) && round !== RoundStatus.EVALUATED && can('inquiry:cancel'))
     actions.push('cancel');
   return actions;
 }
