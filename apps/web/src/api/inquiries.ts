@@ -4,6 +4,7 @@ import type {
   CopyLineFilesInput,
   CreateInquiryInput,
   CreateLineParams,
+  FileAccessLogDto,
   ImportResultDto,
   InquiryApprovalDto,
   InquiryDetailDto,
@@ -43,6 +44,9 @@ export const inquiriesApi = {
   cancel: (id: string, reason: string) => post<InquiryDetailDto>(`/inquiries/${id}/cancel`, { reason }),
   approvals: (id: string) => get<InquiryApprovalDto[]>(`/inquiries/${id}/approvals`),
   timeline: (id: string) => get<AuditLogDto[]>(`/inquiries/${id}/timeline`),
+  /** 规格下载日志（需要 inquiry:accessLog） */
+  accessLogs: (id: string, query: { page: number; pageSize: number }) =>
+    get<Paginated<FileAccessLogDto>>(`/inquiries/${id}/file-access-logs`, query),
 
   round: (id: string, roundNo: number) => get<InquiryRoundDto>(roundPath(id, roundNo)),
   addLine: (id: string, roundNo: number, body: CreateLineParams) =>

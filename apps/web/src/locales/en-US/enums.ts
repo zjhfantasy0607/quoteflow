@@ -46,6 +46,16 @@ const enums: LocaleMessages['enums'] = {
     DISABLED: 'Disabled',
     NONE: 'Not set up',
   },
+  PortalQuoteStatus: {
+    INVITED: 'To quote',
+    NO_RESPONSE: 'Not quoted',
+    SUBMITTED: 'Quoted',
+    DECLINED: 'Declined',
+    EVALUATING: 'Under evaluation',
+    WON: 'Awarded',
+    LOST: 'Not awarded',
+    VOID: 'Void',
+  },
   NegotiationStatus: { OPEN: 'In negotiation', AGREED: 'Agreed', CLOSED: 'Closed' },
   NegotiationParty: { BUYER: 'Buyer', SUPPLIER: 'Supplier' },
   NegotiationMsgType: {

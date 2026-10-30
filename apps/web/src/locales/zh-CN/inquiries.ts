@@ -139,6 +139,7 @@ export default {
       invitees: '邀请供应商',
       responses: '供应商响应',
       approvals: '审批记录',
+      accessLogs: '下载日志',
       logs: '操作日志',
     },
     actions: {
@@ -257,6 +258,12 @@ export default {
     shortcut: '顺延 {days} 天',
     confirm: '确定延期',
     done: '已延期到 {time}',
+  },
+  accessLogs: {
+    hint: '供应商和内部用户在线预览、下载规格书与产品图的记录，新的在前',
+    fields: { time: '时间', supplier: '供应商', user: '用户', file: '文件名', action: '动作' },
+    internal: '内部用户',
+    empty: '暂无记录',
   },
   approvals: {
     title: '待我审批',

@@ -19,6 +19,7 @@ import { confirmAction, promptText } from '@/utils/dialogs';
 import { formatDateTime, pickName } from '@/utils/format';
 import { inquiryNo, remainingText } from '@/utils/inquiries';
 import ApprovalTimeline from './ApprovalTimeline.vue';
+import InquiryAccessLogsTab from './InquiryAccessLogsTab.vue';
 import InquiryFilesSection from './InquiryFilesSection.vue';
 import InquiryInviteesTab from './InquiryInviteesTab.vue';
 import InquiryLinesTable from './InquiryLinesTable.vue';
@@ -28,7 +29,7 @@ import PublishDialog from './PublishDialog.vue';
 
 /**
  * 询价单详情（M06 §5、M07 §5）：表头卡片 + 按 allowedActions 显示的操作 + 页签（明细与附件 / 邀请供应商 /
- * 供应商响应（发布后） / 审批记录 / 操作日志）；待审批时页面底部是"审批操作"区（参考 PPT #22）
+ * 供应商响应（发布后） / 审批记录 / 下载日志（M08） / 操作日志）；待审批时页面底部是"审批操作"区（参考 PPT #22）
  */
 const { t, locale } = useI18n();
 const route = useRoute();
@@ -357,6 +358,14 @@ watch(
           </el-tab-pane>
           <el-tab-pane name="approvals" :label="t('inquiries.detail.tabs.approvals')">
             <ApprovalTimeline :items="approvals" />
+          </el-tab-pane>
+          <el-tab-pane
+            v-if="can('viewAccessLog')"
+            name="accessLogs"
+            :label="t('inquiries.detail.tabs.accessLogs')"
+            lazy
+          >
+            <InquiryAccessLogsTab :inquiry="inquiry" />
           </el-tab-pane>
           <el-tab-pane name="logs" :label="t('inquiries.detail.tabs.logs')">
             <InquiryLogs :items="logs" :loading="logsLoading" />

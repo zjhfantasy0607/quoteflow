@@ -1,17 +1,30 @@
 <script setup lang="ts">
+import type { AppConfigDto } from '@quoteflow/shared';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { paramsApi } from '@/api/system';
 import AppMenu from '@/components/AppMenu.vue';
 import LanguageSwitch from '@/components/LanguageSwitch.vue';
 import UserMenu from '@/components/UserMenu.vue';
 import { portalRoute } from '@/router/routes';
 
-const { t } = useI18n();
+/** 供应商门户（M08 §5）：顶栏是采购方的公司名称（系统参数 company.profile）+"供应商门户" */
+const { t, locale } = useI18n();
+const company = ref<AppConfigDto['company'] | null>(null);
+const brand = computed(() => {
+  if (!company.value) return t('common.appName');
+  return locale.value === 'en-US' ? company.value.nameEn : company.value.nameZh;
+});
+
+onMounted(async () => {
+  company.value = (await paramsApi.appConfig().catch(() => null))?.company ?? null;
+});
 </script>
 
 <template>
   <el-container class="layout">
     <el-header class="layout-header">
-      <div class="brand">{{ t('common.appName') }}</div>
+      <div class="brand">{{ brand }}</div>
       <el-divider direction="vertical" />
       <div class="portal-name">{{ t('common.portalName') }}</div>
       <div class="spacer" />

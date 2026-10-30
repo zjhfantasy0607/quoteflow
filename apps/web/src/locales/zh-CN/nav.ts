@@ -1,6 +1,10 @@
 export default {
   workbench: '工作台',
   portalHome: '首页',
+  portalQuotes: '我的询价',
+  portalQuoteDetail: '询价详情',
+  portalProfile: '企业资料',
+  portalAccount: '账号设置',
   login: '登录',
   inquiriesGroup: '询价管理',
   inquiries: '询价单',

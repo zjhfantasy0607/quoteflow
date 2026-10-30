@@ -197,6 +197,35 @@ export const portalRoute: RouteRecordRaw = {
       component: () => import('@/views/portal/PortalHomePage.vue'),
       meta: { titleKey: 'nav.portalHome', userType: 'SUPPLIER', menu: { icon: 'House', order: 0 } },
     },
+    {
+      path: 'quotes',
+      name: 'portal-quotes',
+      component: () => import('@/views/portal/PortalQuotesPage.vue'),
+      meta: { titleKey: 'nav.portalQuotes', userType: 'SUPPLIER', menu: { icon: 'Document', order: 10 } },
+    },
+    {
+      // 邀请、催报、延期邮件里的链接（M07 R07-5）
+      path: 'quotes/:quoteId',
+      name: 'portal-quote',
+      component: () => import('@/views/portal/PortalQuoteDetailPage.vue'),
+      meta: { titleKey: 'nav.portalQuoteDetail', userType: 'SUPPLIER' },
+    },
+    {
+      path: 'profile',
+      name: 'portal-profile',
+      component: () => import('@/views/portal/PortalProfilePage.vue'),
+      meta: {
+        titleKey: 'nav.portalProfile',
+        userType: 'SUPPLIER',
+        menu: { icon: 'OfficeBuilding', order: 20 },
+      },
+    },
+    {
+      path: 'account',
+      name: 'portal-account',
+      component: () => import('@/views/portal/PortalAccountPage.vue'),
+      meta: { titleKey: 'nav.portalAccount', userType: 'SUPPLIER', menu: { icon: 'Setting', order: 30 } },
+    },
   ],
 };
 

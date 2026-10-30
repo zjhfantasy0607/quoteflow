@@ -144,6 +144,7 @@ const inquiries: LocaleMessages['inquiries'] = {
       invitees: 'Suppliers',
       responses: 'Responses',
       approvals: 'Approval History',
+      accessLogs: 'Downloads',
       logs: 'Activity Log',
     },
     actions: {
@@ -267,6 +268,12 @@ const inquiries: LocaleMessages['inquiries'] = {
     shortcut: '+{days} days',
     confirm: 'Extend',
     done: 'Deadline extended to {time}',
+  },
+  accessLogs: {
+    hint: 'Previews and downloads of specifications and product images by suppliers and internal users, newest first',
+    fields: { time: 'Time', supplier: 'Supplier', user: 'User', file: 'File name', action: 'Action' },
+    internal: 'Internal user',
+    empty: 'No records',
   },
   approvals: {
     title: 'My Approvals',

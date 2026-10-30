@@ -3,6 +3,10 @@ import type { LocaleMessages } from '../types';
 const nav: LocaleMessages['nav'] = {
   workbench: 'Workbench',
   portalHome: 'Home',
+  portalQuotes: 'My RFQs',
+  portalQuoteDetail: 'RFQ Details',
+  portalProfile: 'Company Profile',
+  portalAccount: 'Account Settings',
   login: 'Sign in',
   inquiriesGroup: 'RFQs',
   inquiries: 'RFQ List',

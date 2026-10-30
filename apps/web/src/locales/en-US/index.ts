@@ -8,6 +8,7 @@ import file from './file';
 import inquiries from './inquiries';
 import materials from './materials';
 import nav from './nav';
+import portal from './portal';
 import suppliers from './suppliers';
 import system from './system';
 import workbench from './workbench';
@@ -21,6 +22,7 @@ const enUS: LocaleMessages = {
   materials,
   suppliers,
   inquiries,
+  portal,
   file,
   excel,
   enums,
