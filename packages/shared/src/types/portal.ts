@@ -1,7 +1,11 @@
 import type { FileAccessAction, QuoteStatus, RoundStatus, SupplierLanguage } from '../enums';
 import type { PortalQuoteAction } from '../inquiry-actions';
+import type { PplValues } from '../ppl/values';
 import type { InquiryFileKind } from '../schemas/inquiries';
+import type { QuoteDraftSource } from '../schemas/portal';
 import type { FileDto } from './infra';
+import type { PplResolvedDto } from './ppl';
+import type { QuoteVersionDto } from './quotes';
 
 // 供应商门户（M08）。门户里不出现内部信息（05 §7.2 P-5）：项目号、草稿号、审批记录、其他供应商、
 // 询价行的备注（按"内部备注"处理）、供应商分类和内部备注都不返回
@@ -83,8 +87,27 @@ export interface PortalQuoteDetailDto {
   lines: PortalLineDto[];
   /** 整单附件（规格书） */
   files: PortalFileDto[];
-  /** M09 起有内容 */
+  /** 该轮冻结的模板版本与变体解析后的列（R09-2） */
+  template: PplResolvedDto;
+  /** 草稿，只有供应商自己看得到（02 §4）；没有草稿为 null */
+  draft: PortalQuoteDraftDto | null;
+  /** 当前版本 = 最后一次提交（R09-5）；还没提交过为 null */
+  currentVersion: QuoteVersionDto | null;
+  versionCount: number;
+  /** computePortalQuoteActions()：报价窗口外（已截止、作废）为空 */
   allowedActions: PortalQuoteAction[];
+}
+
+/** 供应商草稿（R09-3、R09-8） */
+export interface PortalQuoteDraftDto {
+  /** 询价行 id → 供应商填写列的取值 */
+  lines: Record<string, PplValues>;
+  remark: string | null;
+  changeNote: string | null;
+  attachments: FileDto[];
+  /** 最近一次写入草稿的方式：在线保存 / 导入 Excel */
+  source: QuoteDraftSource;
+  updatedAt: string;
 }
 
 /** GET /api/portal/profile：本供应商的企业资料（只读） */

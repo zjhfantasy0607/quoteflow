@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { FieldPermissionCode } from '@quoteflow/shared';
+import type { FieldPermissionCode, PplColumn, PplValue } from '@quoteflow/shared';
 import type { AuthUser } from './auth-user';
 
 export type Masked<T> = T & { maskedFields?: string[] };
@@ -34,5 +34,25 @@ export class FieldMaskService {
     user: Pick<AuthUser, 'fieldPermissions'>,
   ): Masked<T> {
     return this.mask(supplier, user, 'supplier.contact', ['contactEmail', 'contactPhone', 'ccEmails']);
+  }
+
+  /**
+   * 报价金额（05 §10、S-5）：合计和 PPL 里 sensitive 的列。没有 quote.amount 时合计、每行这些列的值都为 null，
+   * maskedFields 记 totalAmount 和这些列的 key。只用于开标后（或有开标前查看授权）的采购方，密封由 SealService 判断
+   */
+  quoteVersion<
+    T extends { totalAmount: string | null; lines?: { values: Record<string, PplValue | null> }[] },
+  >(version: T, columns: readonly PplColumn[], user: Pick<AuthUser, 'fieldPermissions'>): Masked<T> {
+    if (this.can(user, 'quote.amount')) return version;
+    const keys = columns.filter((c) => c.sensitive).map((c) => c.key);
+    const hidden = Object.fromEntries(keys.map((key) => [key, null]));
+    const masked = this.mask(version, user, 'quote.amount', ['totalAmount']);
+    return {
+      ...masked,
+      ...(version.lines
+        ? { lines: version.lines.map((l) => ({ ...l, values: { ...l.values, ...hidden } })) }
+        : {}),
+      maskedFields: [...new Set([...(masked.maskedFields ?? []), ...keys])],
+    };
   }
 }

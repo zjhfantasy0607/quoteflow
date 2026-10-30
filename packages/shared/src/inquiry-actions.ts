@@ -1,4 +1,4 @@
-import { InquiryDocStatus, RoundStatus } from './enums';
+import { InquiryDocStatus, QuoteStatus, RoundStatus } from './enums';
 import type { PermissionCode } from './permissions';
 
 /** 询价单、轮次详情的 allowedActions（docs/03 §6）：前端只按它显示操作按钮 */
@@ -24,7 +24,7 @@ export const INQUIRY_ACTIONS = [
 ] as const;
 export type InquiryAction = (typeof INQUIRY_ACTIONS)[number];
 
-/** 门户报价单详情的 allowedActions（docs/03 §6），M09 起由 computePortalQuoteActions() 生成 */
+/** 门户报价单详情的 allowedActions（docs/03 §6），由 computePortalQuoteActions() 生成 */
 export const PORTAL_QUOTE_ACTIONS = [
   'saveDraft',
   'submit',
@@ -104,5 +104,47 @@ export function computeInquiryActions(ctx: InquiryActionContext, perms: Permissi
     actions.push('cancel');
   // R08-4：规格下载日志，任何状态都能看（内部用户的访问也记录）
   if (can('inquiry:accessLog')) actions.push('viewAccessLog');
+  return actions;
+}
+
+// ---------- 门户报价单（M09） ----------
+
+export interface PortalQuoteActionContext {
+  quoteStatus: QuoteStatus;
+  roundStatus: RoundStatus;
+  /** Date 或 ISO 字符串 */
+  deadline: Date | string | null;
+}
+
+/** 可以提交（含撤销拒绝后重新提交）、保存草稿的报价单状态（05 §4） */
+const QUOTE_RESPONDING_STATUSES: readonly QuoteStatus[] = [
+  QuoteStatus.INVITED,
+  QuoteStatus.SUBMITTED,
+  QuoteStatus.DECLINED,
+];
+/** 可以拒绝的报价单状态：已拒绝的不能再拒绝（05 §4） */
+const QUOTE_DECLINABLE_STATUSES: readonly QuoteStatus[] = [QuoteStatus.INVITED, QuoteStatus.SUBMITTED];
+
+/**
+ * R09-1：轮次等待报价、现在早于截止时间。只看当前时间，不依赖截止任务是否已把轮次改为"报价完成"。
+ * 后端传 ClockService.now()；前端用浏览器时间，只用来决定按钮显示，以后端为准
+ */
+export function isQuoteWindowOpen(ctx: PortalQuoteActionContext, now: Date): boolean {
+  return (
+    ctx.roundStatus === RoundStatus.WAITING_QUOTES &&
+    ctx.deadline !== null &&
+    now.getTime() < new Date(ctx.deadline).getTime()
+  );
+}
+
+/**
+ * 门户报价单的填报动作（05 §4、R09-1）：报价窗口内，没有作废的报价单可以保存草稿、提交、下载与导入锁定 Excel，
+ * 待报价和已提交的可以拒绝（已拒绝的可以撤销拒绝重新提交，A-23）。议价回复由 M11 补充
+ */
+export function computePortalQuoteActions(ctx: PortalQuoteActionContext, now: Date): PortalQuoteAction[] {
+  if (!isQuoteWindowOpen(ctx, now) || !QUOTE_RESPONDING_STATUSES.includes(ctx.quoteStatus)) return [];
+  const actions: PortalQuoteAction[] = ['saveDraft', 'submit'];
+  if (QUOTE_DECLINABLE_STATUSES.includes(ctx.quoteStatus)) actions.push('decline');
+  actions.push('downloadTemplate', 'importExcel');
   return actions;
 }

@@ -25,3 +25,4 @@ export * from './types/suppliers';
 export * from './types/ppl';
 export * from './types/inquiries';
 export * from './types/portal';
+export * from './types/quotes';

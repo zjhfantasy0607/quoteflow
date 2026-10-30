@@ -12,7 +12,9 @@ import { Agent, anonymous, loginAs } from './helpers/auth';
 import { resetDb } from './helpers/db';
 import { createSupplier, createUser, seedBase, TEST_PASSWORD } from './helpers/fixtures';
 import { addManualLine, createDraftInquiry, publishRound } from './helpers/inquiries';
+import { ledValues, submitQuote } from './helpers/quotes';
 import { createTestApp, TestContext } from './helpers/test-app';
+import { binaryParser } from './helpers/xlsx';
 
 const HOUR = 3600_000;
 const START = new Date('2026-11-02T01:00:00.000Z');
@@ -21,13 +23,15 @@ const PDF = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(200, 0x20), B
 const PROJECT_NO = 'PJ-SECRET-008';
 const LINE_REMARK = '内部：目标价 0.15';
 
-/** 门户响应里不能出现的键（05 §7.2 P-5、R08-7） */
+/**
+ * 门户响应里不能出现的键（05 §7.2 P-5、R08-7）。询价行的内部备注另外按"询价行上没有 remark"检查：
+ * M09 起供应商自己报价的备注（版本、草稿的 remark）是可以返回的
+ */
 const FORBIDDEN_KEYS = [
   'projectNo',
   'draftNo',
   'approvals',
   'lastRejectComment',
-  'remark',
   'departmentCode',
   'ownerId',
   'createdBy',
@@ -209,9 +213,10 @@ describe('M08 供应商门户与隔离', () => {
         cancelReason: null,
       },
       round: { roundNo: 1, status: 'WAITING_QUOTES', pplTemplateVersion: 1, pplVariantCode: 'PPL-LED' },
-      allowedActions: [],
+      allowedActions: ['saveDraft', 'submit', 'decline', 'downloadTemplate', 'importExcel'],
     });
     expect(detail.lines).toHaveLength(1);
+    for (const line of detail.lines) expect(line).not.toHaveProperty('remark');
     expect(detail.lines[0]).toMatchObject({ lineNo: 1, nameZh: '手工物料', quantity: '100' });
     expect(detail.lines[0].files.map((f) => f.file.id)).toEqual([files.xImage]);
     expect(detail.files.map((f) => f.file.id)).toEqual([files.xSpec]);
@@ -315,6 +320,40 @@ describe('M08 供应商门户与隔离', () => {
     }
     await buyer.get('/api/portal/quotes').expect(403);
     await buyer.get('/api/portal/profile').expect(403);
+  });
+
+  it('M09 报价填报接口同样隔离：别家的报价单一律 404，内部用户 403；带草稿和版本的详情仍不含内部信息', async () => {
+    const quoteA = await quoteOf(x.id, s.a);
+    const line = await ctx.prisma.inquiryLine.findFirstOrThrow({ where: { round: { inquiryId: x.id } } });
+    const lines = { [line.id]: ledValues() };
+    const url = `/api/portal/quotes/${quoteA.id}`;
+    await submitQuote(portalA, quoteA.id, lines, { remark: '我方备注' });
+    await portalA.put(`${url}/draft`).send({ lines, changeNote: '准备降价' }).expect(200);
+    await portalA.get(`${url}/excel-template`).buffer(true).parse(binaryParser).expect(200);
+
+    const tries = [
+      await portalB.put(`${url}/draft`).send({ lines: {} }),
+      await portalB.post(`${url}/submit`).send({ lines }),
+      await portalB.post(`${url}/decline`).send({ reasonCode: 'OTHER', reason: '试试' }),
+      await portalB.get(`${url}/versions`),
+      await portalB.get(`${url}/versions/1`),
+      await portalB.get(`${url}/excel-template`),
+      await portalB.post(`${url}/excel-import`).attach('file', Buffer.from('x'), 'quote.xlsx'),
+    ];
+    for (const res of tries) expect(res.status).toBe(404);
+    await buyer.put(`${url}/draft`).send({ lines: {} }).expect(403);
+    await manager.get(`${url}/versions/1`).expect(403);
+
+    const res = await portalA.get(url).expect(200);
+    const detail = res.body as PortalQuoteDetailDto;
+    expect(detail.draft).toMatchObject({ changeNote: '准备降价' });
+    expect(detail.currentVersion).toMatchObject({ versionNo: 1, remark: '我方备注' });
+    const keys = keysOf(res.body);
+    for (const key of FORBIDDEN_KEYS) expect(keys.has(key)).toBe(false);
+    for (const l of detail.lines) expect(l).not.toHaveProperty('remark');
+    const text = JSON.stringify(res.body);
+    for (const secret of [PROJECT_NO, x.draftNo, LINE_REMARK, s.b.nameZh, s.b.code])
+      expect(text).not.toContain(secret);
   });
 
   it('企业资料只读：本供应商的资料，不含供应商分类、内部备注、状态', async () => {

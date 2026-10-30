@@ -1,12 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import {
+  computePortalQuoteActions,
   PORTAL_QUOTE_TAB_ROUND_STATUSES,
   type InquiryFileKind,
   type Paginated,
   type PortalFileDto,
   type PortalQuoteDetailDto,
+  type PortalQuoteDraftDto,
   type PortalQuoteListItemDto,
   type PortalQuoteListQuery,
+  type QuoteVersionDto,
+  type QuoteVersionSummaryDto,
   type SupplierLanguage,
   type SupplierProfileDto,
 } from '@quoteflow/shared';
@@ -18,6 +22,8 @@ import type { Prisma } from '../../generated/prisma/client';
 import { toFileDto } from '../../infra/files/files.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { loadRound, type RoundRow } from '../inquiries/inquiry-dto';
+import { draftOf, loadVersion, loadVersionSummaries } from '../quotes/quote-dto';
+import { QuoteSheetService } from '../quotes/quote-sheet.service';
 
 const iso = (d: Date | null) => d?.toISOString() ?? null;
 
@@ -48,6 +54,9 @@ const detailSelect = {
   declinedAt: true,
   declineReasonCode: true,
   declineReason: true,
+  currentVersionId: true,
+  draftValues: true,
+  draftUpdatedAt: true,
   round: {
     select: {
       roundNo: true,
@@ -90,6 +99,7 @@ export class PortalQuotesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly clock: ClockService,
+    private readonly sheet: QuoteSheetService,
   ) {}
 
   /** R08-1：待处理 / 评标中 / 已结束；待处理按截止时间先后，其余按邀请时间倒序 */
@@ -135,12 +145,13 @@ export class PortalQuotesService {
   }
 
   /**
-   * 报价单详情（R08-7）：询价信息、轮次（含变更说明）、询价行与附件、我的报价状态。
+   * 报价单详情（R08-7）：询价信息、轮次（含变更说明）、询价行与附件、我的报价状态；M09 起另有该轮冻结的模板、
+   * 草稿、当前版本和 allowedActions。
    * R08-2：没作废的报价单第一次打开时写 firstViewedAt（采购方"供应商响应"里显示"已查看"），只写一次
    */
   async detail(user: AuthUser, quoteId: string): Promise<PortalQuoteDetailDto> {
     const quote = await this.prisma.quote.findFirst({
-      where: { id: quoteId, supplierId: supplierOf(user), round: { publishedAt: { not: null } } },
+      where: { id: quoteId, ...ownQuoteWhere(user) },
       select: detailSelect,
     });
     if (!quote) throw new AppException('NOT_FOUND');
@@ -212,8 +223,57 @@ export class PortalQuotesService {
         files: filesOf(l.id),
       })),
       files: filesOf(null),
-      // M09 起由 computePortalQuoteActions() 生成
-      allowedActions: [],
+      template: await this.sheet.template(round),
+      draft: await this.draftDto(quote.draftValues, quote.draftUpdatedAt),
+      currentVersion: quote.currentVersionId
+        ? await loadVersion(this.prisma, { id: quote.currentVersionId })
+        : null,
+      versionCount: await this.prisma.quoteVersion.count({ where: { quoteId: quote.id } }),
+      allowedActions: computePortalQuoteActions(
+        { quoteStatus: quote.status, roundStatus: round.status, deadline: round.deadline },
+        this.clock.now(),
+      ),
+    };
+  }
+
+  /** R09-7：自己的全部版本（作废的旧轮次也能看，P-4），新的在前 */
+  async versions(user: AuthUser, quoteId: string): Promise<QuoteVersionSummaryDto[]> {
+    await this.ownQuote(user, quoteId);
+    return loadVersionSummaries(this.prisma, quoteId);
+  }
+
+  async version(user: AuthUser, quoteId: string, versionNo: number): Promise<QuoteVersionDto> {
+    await this.ownQuote(user, quoteId);
+    const version = await loadVersion(this.prisma, { quoteId_versionNo: { quoteId, versionNo } });
+    if (!version) throw new AppException('NOT_FOUND');
+    return version;
+  }
+
+  private async ownQuote(user: AuthUser, quoteId: string): Promise<void> {
+    const found = await this.prisma.quote.count({ where: { id: quoteId, ...ownQuoteWhere(user) } });
+    if (found === 0) throw new AppException('NOT_FOUND');
+  }
+
+  /** 草稿连同附件文件（按草稿里的顺序；已被清理的文件不再列出） */
+  private async draftDto(
+    json: Prisma.JsonValue | null,
+    updatedAt: Date | null,
+  ): Promise<PortalQuoteDraftDto | null> {
+    const draft = draftOf(json);
+    if (!draft || !updatedAt) return null;
+    const ids = draft.attachmentFileIds ?? [];
+    const files = ids.length > 0 ? await this.prisma.fileObject.findMany({ where: { id: { in: ids } } }) : [];
+    const byId = new Map(files.map((f) => [f.id, f]));
+    return {
+      lines: draft.lines,
+      remark: draft.remark ?? null,
+      changeNote: draft.changeNote ?? null,
+      attachments: ids.flatMap((id) => {
+        const file = byId.get(id);
+        return file ? [toFileDto(file)] : [];
+      }),
+      source: draft.source ?? 'ONLINE',
+      updatedAt: updatedAt.toISOString(),
     };
   }
 
@@ -243,7 +303,12 @@ export class PortalQuotesService {
 }
 
 /** 供应商用户一定挂在某个供应商下；没有的视为无权访问 */
-function supplierOf(user: AuthUser): string {
+export function supplierOf(user: AuthUser): string {
   if (!user.supplierId) throw new AppException('FORBIDDEN');
   return user.supplierId;
+}
+
+/** 本供应商的、所在轮次已发布的报价单（P-1、P-2）；别家的和不存在的一样 404 */
+export function ownQuoteWhere(user: AuthUser): Prisma.QuoteWhereInput {
+  return { supplierId: supplierOf(user), round: { publishedAt: { not: null } } };
 }

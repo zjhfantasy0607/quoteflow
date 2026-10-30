@@ -20,6 +20,7 @@ import { MaterialCategoriesModule } from './modules/material-categories/material
 import { MaterialsModule } from './modules/materials/materials.controller';
 import { PortalModule } from './modules/portal/portal.controller';
 import { PplModule } from './modules/ppl/ppl.controller';
+import { QuotesModule } from './modules/quotes/round-quotes.controller';
 import { RolesModule } from './modules/roles/roles.controller';
 import { SuppliersModule } from './modules/suppliers/suppliers.controller';
 import { UsersModule } from './modules/users/users.controller';
@@ -52,6 +53,7 @@ const scheduler = process.env.JOBS_ENABLED === 'false' ? [] : [ScheduleModule.fo
     PplModule,
     SuppliersModule,
     InquiriesModule,
+    QuotesModule,
     PortalModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
