@@ -23,7 +23,7 @@ import {
   defaultValues,
   dictLookup,
   errorMap,
-  portalSheetLines,
+  sheetLines,
   sheetTotal,
   supplierValues,
   validateSheet,
@@ -45,7 +45,7 @@ const dict = useDictStore();
 
 const columns = computed(() => props.detail.template.columns);
 const lines = computed(() =>
-  portalSheetLines(
+  sheetLines(
     props.detail.lines,
     columns.value,
     props.detail.inquiry.currency,

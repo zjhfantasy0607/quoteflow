@@ -33,9 +33,15 @@ export type PplRawValues = Record<string, unknown>;
 /** 校验错误按行、列 key 分组 */
 export type PplErrorMap = Record<string, Record<string, PplValueError>>;
 
-/** 门户询价行 → 报价表行；单位名称取字典（找不到时显示编码），币种取询价单 */
-export function portalSheetLines(
-  lines: readonly PortalLineDto[],
+/** 报价表行的来源：门户的询价行（PortalLineDto）或采购方轮次详情里的询价行（InquiryLineDto） */
+export type SheetLineSource = Pick<
+  PortalLineDto,
+  'id' | 'lineNo' | 'materialCode' | 'nameZh' | 'nameEn' | 'spec' | 'unitCode' | 'quantity' | 'drawingRef'
+> & { category: Pick<PortalLineDto['category'], 'nameZh' | 'nameEn'> };
+
+/** 询价行 → 报价表行；单位名称取字典（找不到时显示编码），币种取询价单 */
+export function sheetLines(
+  lines: readonly SheetLineSource[],
   columns: readonly PplColumn[],
   currency: string,
   locale: Locale,

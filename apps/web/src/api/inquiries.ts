@@ -18,7 +18,9 @@ import type {
   InviteeCandidateDto,
   InviteeCandidatesParams,
   Paginated,
-  QuoteResponseDto,
+  QuoteVersionDto,
+  RoundQuoteDetailDto,
+  RoundResponsesDto,
   UpdateInquiryInput,
   UpdateLineParams,
 } from '@quoteflow/shared';
@@ -93,6 +95,14 @@ export const inquiriesApi = {
     post<InquiryDetailDto>(`${roundPath(id, roundNo)}/remind`, { quoteIds }),
   extendDeadline: (id: string, roundNo: number, deadline: string) =>
     put<InquiryDetailDto>(`${roundPath(id, roundNo)}/deadline`, { deadline }),
-  /** 供应商响应（开标前只有状态字段） */
-  responses: (id: string, roundNo: number) => get<QuoteResponseDto[]>(`${roundPath(id, roundNo)}/responses`),
+  /** 供应商响应（密封时只有状态字段，开标后另含合计） */
+  responses: (id: string, roundNo: number) => get<RoundResponsesDto>(`${roundPath(id, roundNo)}/responses`),
+  /** 提前截止、开标（M10，需要 inquiry:open） */
+  closeEarly: (id: string, roundNo: number) => post<InquiryDetailDto>(`${roundPath(id, roundNo)}/close-early`),
+  open: (id: string, roundNo: number) => post<InquiryDetailDto>(`${roundPath(id, roundNo)}/open`),
+  /** 采购方看某家的报价（需要 inquiry:evaluate）；密封、404 由页面自己提示 */
+  quote: (id: string, roundNo: number, quoteId: string) =>
+    get<RoundQuoteDetailDto>(`${roundPath(id, roundNo)}/quotes/${quoteId}`, undefined, { silent: true }),
+  quoteVersion: (id: string, roundNo: number, quoteId: string, versionNo: number) =>
+    get<QuoteVersionDto>(`${roundPath(id, roundNo)}/quotes/${quoteId}/versions/${versionNo}`),
 };

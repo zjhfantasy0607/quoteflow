@@ -5,7 +5,7 @@ import {
   errorMap,
   formatDecimalInput,
   formatIntInput,
-  portalSheetLines,
+  sheetLines,
   requiredProgress,
   sheetTotal,
   supplierValues,
@@ -28,7 +28,7 @@ const line = (id: string, lineNo: number, quantity: string): PortalLineDto => ({
   files: [],
 });
 const unitOf = () => ({ nameZh: '个', nameEn: 'pcs' });
-const lines = portalSheetLines(
+const lines = sheetLines(
   [line('l1', 1, '1000'), line('l2', 2, '500')],
   columns,
   'CNY',
@@ -46,7 +46,7 @@ describe('PPL 表单工具（M09）', () => {
       quantity: '1000',
       currency: 'CNY',
     });
-    const zh = portalSheetLines([line('l1', 1, '1000')], columns, 'CNY', 'zh-CN', unitOf);
+    const zh = sheetLines([line('l1', 1, '1000')], columns, 'CNY', 'zh-CN', unitOf);
     expect(zh[0].prefill).toMatchObject({ material_name: '透镜 1', unit: '个' });
   });
 

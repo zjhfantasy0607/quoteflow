@@ -14,6 +14,7 @@ const nav: LocaleMessages['nav'] = {
   inquiryNew: 'New RFQ',
   inquiryEdit: 'Edit RFQ',
   inquiryDetail: 'RFQ Details',
+  inquiryQuote: 'Quotation Details',
   suppliersGroup: 'Suppliers',
   suppliers: 'Supplier List',
   supplierCategories: 'Supplier Categories',

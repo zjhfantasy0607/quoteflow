@@ -12,6 +12,7 @@ export default {
   inquiryNew: '新建询价单',
   inquiryEdit: '编辑询价单',
   inquiryDetail: '询价单详情',
+  inquiryQuote: '报价详情',
   suppliersGroup: '供应商管理',
   suppliers: '供应商列表',
   supplierCategories: '供应商分类',

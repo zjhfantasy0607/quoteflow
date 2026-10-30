@@ -57,6 +57,12 @@ export const buyerRoute: RouteRecordRaw = {
       meta: { titleKey: 'nav.inquiryDetail', userType: 'INTERNAL', perm: 'inquiry:view' },
     },
     {
+      path: 'inquiries/:id/rounds/:roundNo/quotes/:quoteId',
+      name: 'inquiry-quote',
+      component: () => import('@/views/inquiries/InquiryQuoteDetailPage.vue'),
+      meta: { titleKey: 'nav.inquiryQuote', userType: 'INTERNAL', perm: 'inquiry:evaluate' },
+    },
+    {
       path: 'suppliers',
       name: 'suppliers',
       component: () => import('@/views/suppliers/SuppliersPage.vue'),

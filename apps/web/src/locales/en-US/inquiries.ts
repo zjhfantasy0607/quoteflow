@@ -151,8 +151,12 @@ const inquiries: LocaleMessages['inquiries'] = {
       edit: 'Edit',
       submit: 'Submit for Approval',
       publish: 'Publish RFQ',
+      open: 'Open Bids',
       cancel: 'Cancel RFQ',
     },
+    openConfirm:
+      'After bid opening, users with evaluation permission can view every quotation, and suppliers who submitted a quotation will be notified. Suppliers who did not respond are recorded as no response. Bid opening cannot be undone. Open the bids now?',
+    opened: 'Bids opened. The quotations are now under evaluation',
     cancelledBanner: 'Cancelled at {time}. Reason: {reason}',
     rejectedBanner: 'The last approval was rejected. Comment: {comment}',
     pendingBanner: 'Submitted for approval and waiting for the approver',
@@ -239,7 +243,7 @@ const inquiries: LocaleMessages['inquiries'] = {
   },
   responses: {
     sealedHint:
-      'Before bid opening, only the response status and times are visible; quotation content is sealed.',
+      'Before bid opening, only the response status and times are visible; quotation amounts and content are sealed.',
     summary: '{total} invited: {submitted} submitted, {declined} declined, {pending} not responded',
     fields: {
       supplier: 'Supplier',
@@ -248,8 +252,16 @@ const inquiries: LocaleMessages['inquiries'] = {
       firstViewedAt: 'First viewed',
       respondedAt: 'Responded',
       versionCount: 'Versions',
+      total: 'Total (incl. tax)',
       declineReason: 'Decline reason',
     },
+    noResponse: 'No response',
+    viewQuote: 'View quotation',
+    closeEarly: 'Close early',
+    closeEarlyHint: '{count} supplier(s) have not responded. The round can be closed early only after all have submitted or declined',
+    closeEarlyConfirm:
+      'After closing early, suppliers can no longer submit, revise or decline (you can still extend the deadline to reopen it). Close the round now?',
+    closedEarly: 'Closed early. You can now open the bids',
     viewed: 'Viewed',
     noAccount: 'No active portal account ({state})',
     remind: 'Send reminder ({count})',
@@ -258,6 +270,20 @@ const inquiries: LocaleMessages['inquiries'] = {
     remindConfirm: 'Send a reminder email to the {count} selected suppliers?',
     reminded: '{count} reminder emails sent',
     extend: 'Extend deadline',
+  },
+  progress: {
+    deadline: 'Deadline {time}',
+    closedEarly: 'Closed early',
+    stopped: 'This round has stopped: {status}',
+  },
+  quote: {
+    back: 'Back to responses',
+    sealed: 'Quotations cannot be viewed before bid opening',
+    lastSubmittedAt: 'Last submitted',
+    current: 'Current quotation',
+    noVersion: 'This supplier has not submitted a quotation',
+    declinedHint: 'The supplier has declined. Below is the last quotation submitted before declining, for reference only',
+    versions: 'Version history',
   },
   extend: {
     title: 'Extend deadline',

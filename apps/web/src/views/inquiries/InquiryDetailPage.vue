@@ -26,10 +26,12 @@ import InquiryLinesTable from './InquiryLinesTable.vue';
 import InquiryLogs from './InquiryLogs.vue';
 import InquiryResponsesTab from './InquiryResponsesTab.vue';
 import PublishDialog from './PublishDialog.vue';
+import RoundProgress from './RoundProgress.vue';
 
 /**
- * 询价单详情（M06 §5、M07 §5）：表头卡片 + 按 allowedActions 显示的操作 + 页签（明细与附件 / 邀请供应商 /
- * 供应商响应（发布后） / 审批记录 / 下载日志（M08） / 操作日志）；待审批时页面底部是"审批操作"区（参考 PPT #22）
+ * 询价单详情（M06 §5、M07 §5、M10 §5）：表头卡片 + 轮次进度条（发布后）+ 按 allowedActions 显示的操作 + 页签（明细与附件 /
+ * 邀请供应商 / 供应商响应（发布后） / 审批记录 / 下载日志（M08） / 操作日志）；待审批时页面底部是"审批操作"区（参考 PPT #22）。
+ * ?tab= 指定打开的页签（从报价详情返回时回到"供应商响应"）
  */
 const { t, locale } = useI18n();
 const route = useRoute();
@@ -55,6 +57,15 @@ const can = (action: InquiryAction) => inquiry.value?.allowedActions.includes(ac
 const canReview = computed(() => can('approve') || can('reject'));
 /** 当前轮次已发布（有供应商参与） */
 const published = computed(() => !!inquiry.value?.currentRound.publishedAt);
+/** 能打开的页签（?tab= 指定的不在里面时打开明细） */
+const tabs = computed(() => [
+  'lines',
+  'invitees',
+  ...(published.value ? ['responses'] : []),
+  'approvals',
+  ...(can('viewAccessLog') ? ['accessLogs'] : []),
+  'logs',
+]);
 const deadlineText = computed(() => {
   const deadline = inquiry.value?.currentDeadline;
   if (!deadline) return t('inquiries.detail.deadlineNotSet');
@@ -163,6 +174,21 @@ async function onPublished(updated: InquiryDetailDto): Promise<void> {
   tab.value = 'responses';
 }
 
+/** R10-3：开标后各家报价对有评标权限的人可见，已报价的供应商收到开标通知 */
+async function openBids(): Promise<void> {
+  if (!(await confirmAction(t('inquiries.detail.openConfirm'), { type: 'warning' }))) return;
+  acting.value = true;
+  try {
+    await afterAction(await inquiriesApi.open(id.value, inquiry.value!.currentRoundNo));
+    tab.value = 'responses';
+    ElMessage.success(t('inquiries.detail.opened'));
+  } catch {
+    // 错误提示由 http 拦截器显示
+  } finally {
+    acting.value = false;
+  }
+}
+
 async function cancel(): Promise<void> {
   // R07-11：发布后取消，原因会写进发给供应商的取消通知
   const prompt = published.value ? 'inquiries.detail.cancelPromptPublished' : 'inquiries.detail.cancelPrompt';
@@ -198,9 +224,10 @@ watch(
     inquiry.value = null;
     round.value = null;
     logs.value = [];
-    tab.value = 'lines';
+    tab.value = typeof route.query.tab === 'string' ? route.query.tab : 'lines';
     inviteesDirty.value = false;
     await load();
+    if (inquiry.value && !tabs.value.includes(tab.value)) tab.value = 'lines';
     // 从"待我审批"进来时直接滚到审批操作区
     if (route.query.from === 'approvals' && canReview.value) {
       await nextTick();
@@ -235,6 +262,9 @@ watch(
           </el-button>
           <el-button v-if="can('publish')" type="primary" icon="Promotion" @click="openPublish">
             {{ t('inquiries.detail.actions.publish') }}
+          </el-button>
+          <el-button v-if="can('open')" type="primary" icon="Unlock" :loading="acting" @click="openBids">
+            {{ t('inquiries.detail.actions.open') }}
           </el-button>
           <el-button
             v-if="can('cancel')"
@@ -329,6 +359,10 @@ watch(
             <span class="pre">{{ inquiry.description }}</span>
           </el-descriptions-item>
         </el-descriptions>
+      </el-card>
+
+      <el-card v-if="published" shadow="never" class="qf-card section">
+        <RoundProgress :round="inquiry.currentRound" />
       </el-card>
 
       <el-card shadow="never" class="qf-card section">

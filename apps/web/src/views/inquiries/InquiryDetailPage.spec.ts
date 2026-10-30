@@ -69,6 +69,8 @@ const mocks = vi.hoisted(() => {
     timeline: vi.fn(async () => []),
     reject: vi.fn(),
     approve: vi.fn(),
+    open: vi.fn(),
+    responses: vi.fn(async () => ({ sealed: false, items: [] })),
     confirm: vi.fn(async () => true),
   };
 });
@@ -81,6 +83,8 @@ vi.mock('@/api/inquiries', () => ({
     timeline: mocks.timeline,
     reject: mocks.reject,
     approve: mocks.approve,
+    open: mocks.open,
+    responses: mocks.responses,
   },
 }));
 vi.mock('@/api/system', () => ({
@@ -212,6 +216,48 @@ describe('InquiryDetailPage', () => {
       }) as unknown as InquiryDetailDto,
     );
     expect(w.text()).toContain('已于 2026-11-02 10:00 北京时间 取消，原因：项目取消');
+    w.unmount();
+  });
+
+  it('R10-3 报价完成时显示进度条和"开标"按钮，确认后开标并切到供应商响应', async () => {
+    const closedRound = {
+      id: 'r1',
+      roundNo: 1,
+      status: 'QUOTES_CLOSED',
+      deadline: '2026-11-05T02:00:00.000Z',
+      publishedAt: '2026-11-02T01:00:00.000Z',
+      quotesClosedAt: '2026-11-05T02:00:00.000Z',
+      closedEarly: false,
+      openedAt: null,
+      evaluatedAt: null,
+      lineCount: 1,
+    };
+    const closed = mocks.detail({
+      docStatus: 'APPROVED',
+      displayStatus: 'QUOTES_CLOSED',
+      formalNo: 'RFQ-202611-0001',
+      currentRoundStatus: 'QUOTES_CLOSED',
+      currentDeadline: closedRound.deadline,
+      currentRound: closedRound,
+      allowedActions: ['open'],
+    });
+    mocks.open.mockResolvedValue({
+      ...closed,
+      displayStatus: 'OPENED',
+      currentRoundStatus: 'OPENED',
+      currentRound: { ...closedRound, status: 'OPENED', openedAt: '2026-11-05T03:00:00.000Z' },
+      allowedActions: [],
+    });
+    const w = await mountPage(closed as unknown as InquiryDetailDto);
+    expect(w.find('.round-progress').text()).toContain('报价完成');
+    expect(buttonTexts(w)).toContain('开标');
+    await w.findAll('.page-header button').find((b) => b.text() === '开标')!.trigger('click');
+    await flushPromises();
+    expect(mocks.confirm).toHaveBeenCalled();
+    expect(mocks.open).toHaveBeenCalledWith('q1', 1);
+    expect(buttonTexts(w)).not.toContain('开标');
+    expect(mocks.responses).toHaveBeenCalledWith('q1', 1);
+    expect(w.find('.round-progress').text()).toContain('2026-11-05 11:00 北京时间');
     w.unmount();
   });
 });
