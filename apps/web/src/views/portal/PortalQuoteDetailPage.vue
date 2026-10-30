@@ -15,10 +15,12 @@ import { formatFileSize } from '@/utils/files';
 import { formatDateTime, pickName } from '@/utils/format';
 import { remainingText } from '@/utils/inquiries';
 import { portalQuoteStatus } from '@/utils/portal';
+import PortalQuoteForm from './PortalQuoteForm.vue';
+import PortalQuoteVersions from './PortalQuoteVersions.vue';
 
 /**
- * 门户报价详情（M08 §5，参考 PPT #5）：询价信息 + 变更说明（第 2 轮起）+ 询价明细 + 规格附件（在线预览 / 下载，都会被记录）。
- * 作废的旧轮次、取消的询价只读（R08-6）。M09 在这里加报价部分
+ * 门户报价详情（M08 §5，参考 PPT #5）：询价信息 + 变更说明（第 2 轮起）+ 询价明细 + 规格附件（在线预览 / 下载，都会被记录），
+ * 下面是我的报价（M09：在线填写或锁定 Excel、提交、拒绝）和历史版本。作废的旧轮次、取消的询价只读（R08-6）
  */
 const { t, locale } = useI18n();
 const route = useRoute();
@@ -61,6 +63,14 @@ const attachments = computed<(PortalFileDto & { lineNo: number | null })[]>(() =
 const showChange = computed(
   () => !!detail.value && detail.value.round.roundNo > 1 && !!detail.value.round.changeReason,
 );
+/** 已截止：轮次不再等待报价，或者截止时间已过（截止任务还没执行时轮次仍是等待报价，R09-1） */
+const closed = computed(() => {
+  const round = detail.value?.round;
+  return (
+    !!round &&
+    (round.status !== 'WAITING_QUOTES' || !round.deadline || remainingText(round.deadline) === null)
+  );
+});
 
 async function load(): Promise<void> {
   loading.value = true;
@@ -127,7 +137,7 @@ watch(
         class="banner"
       />
       <el-alert
-        v-else-if="detail.round.status !== 'WAITING_QUOTES'"
+        v-else-if="closed"
         type="info"
         :title="t('portal.quote.closedBanner')"
         show-icon
@@ -234,7 +244,7 @@ watch(
         </el-table>
       </el-card>
 
-      <el-card shadow="never" class="qf-card section">
+      <el-card shadow="never" class="qf-card section files-card">
         <template #header>
           <span class="section-title">{{ t('portal.quote.files') }}</span>
           <span class="hint">{{ t('portal.quote.filesHint') }}</span>
@@ -276,6 +286,9 @@ watch(
           </el-table-column>
         </el-table>
       </el-card>
+
+      <PortalQuoteForm :detail="detail" class="section" @changed="detail = $event" />
+      <PortalQuoteVersions :detail="detail" class="section" />
 
       <el-dialog
         :model-value="previewing !== null"

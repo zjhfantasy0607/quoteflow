@@ -317,6 +317,9 @@ export default {
       inquiryFile_attach: '上传规格书或产品图',
       inquiryFile_delete: '删除规格书或产品图',
       inquiryFile_copy: '附件复制到其他行',
+      quote_submit: '提交报价',
+      quote_decline: '拒绝报价',
+      quote_importExcel: '导入 Excel 报价草稿',
     },
   },
 };

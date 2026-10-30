@@ -338,6 +338,9 @@ const system: LocaleMessages['system'] = {
       inquiryFile_attach: 'Upload specification or image',
       inquiryFile_delete: 'Delete specification or image',
       inquiryFile_copy: 'Copy attachments to other lines',
+      quote_submit: 'Submit quotation',
+      quote_decline: 'Decline quotation',
+      quote_importExcel: 'Import quotation draft from Excel',
     },
   },
 };

@@ -9,6 +9,7 @@ import inquiries from './inquiries';
 import materials from './materials';
 import nav from './nav';
 import portal from './portal';
+import ppl from './ppl';
 import suppliers from './suppliers';
 import system from './system';
 import workbench from './workbench';
@@ -23,6 +24,7 @@ const enUS: LocaleMessages = {
   suppliers,
   inquiries,
   portal,
+  ppl,
   file,
   excel,
   enums,
