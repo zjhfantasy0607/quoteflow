@@ -1,7 +1,14 @@
 import { z } from 'zod';
 import { EmailStatus, EmailType } from '../enums';
 import type { SystemParamValue } from '../params';
-import { dateQueryParam, idSchema, optionalText, pageQuerySchema, requiredText } from './common';
+import {
+  dateQueryParam,
+  idSchema,
+  optionalText,
+  pageQuerySchema,
+  queryBoolean,
+  requiredText,
+} from './common';
 
 // ---------- 文件 ----------
 
@@ -31,6 +38,8 @@ export type UploadFileInput = z.infer<typeof uploadFileSchema>;
 
 export const fileContentQuerySchema = z.object({
   disposition: z.enum(['inline', 'attachment']).default('attachment'),
+  /** 内部页面里自动加载的缩略图：内部用户不记访问日志（M08 R08-3），供应商照样记 */
+  thumbnail: queryBoolean.optional(),
 });
 export type FileContentQuery = z.infer<typeof fileContentQuerySchema>;
 

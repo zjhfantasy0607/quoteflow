@@ -16,8 +16,12 @@ export const filesApi = {
     return res.data;
   },
   meta: (id: string) => get<FileDto>(`/files/${id}/meta`),
-  sheetPreview: (id: string) => get<SheetPreviewDto>(`/files/${id}/sheet-preview`, undefined, { silent: true }),
-  /** 在线预览（inline）或下载（attachment）地址；同源请求会带上会话 cookie */
-  contentUrl: (id: string, disposition: 'inline' | 'attachment' = 'attachment') =>
-    `/api/files/${id}/content?disposition=${disposition}`,
+  sheetPreview: (id: string) =>
+    get<SheetPreviewDto>(`/files/${id}/sheet-preview`, undefined, { silent: true }),
+  /**
+   * 在线预览（inline）或下载（attachment）地址；同源请求会带上会话 cookie。
+   * thumbnail：内部页面自动加载的缩略图，不记访问日志（点开放大用不带它的地址，照样记）
+   */
+  contentUrl: (id: string, disposition: 'inline' | 'attachment' = 'attachment', thumbnail = false) =>
+    `/api/files/${id}/content?disposition=${disposition}${thumbnail ? '&thumbnail=true' : ''}`,
 };

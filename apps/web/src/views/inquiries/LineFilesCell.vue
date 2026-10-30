@@ -34,8 +34,9 @@ const items = computed(() => props.files.filter((f) => f.kind === props.kind));
 const isImage = computed(() => props.kind === 'PRODUCT_IMAGE');
 const max = computed(() => props.limits?.imagesPerLine ?? 10);
 const full = computed(() => isImage.value && items.value.length + uploading.value >= max.value);
-const imageUrl = (f: InquiryFileDto) => filesApi.contentUrl(f.file.id, 'inline');
-const imageUrls = computed(() => items.value.map(imageUrl));
+// 缩略图不记访问日志，点开放大（preview-src-list）用普通地址，照样记（R08-3）
+const imageUrl = (f: InquiryFileDto) => filesApi.contentUrl(f.file.id, 'inline', true);
+const imageUrls = computed(() => items.value.map((f) => filesApi.contentUrl(f.file.id, 'inline')));
 
 function beforeUpload(raw: UploadRawFile): boolean {
   if (full.value) {

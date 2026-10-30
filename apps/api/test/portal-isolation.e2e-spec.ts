@@ -260,6 +260,18 @@ describe('M08 供应商门户与隔离', () => {
     await content(buyer, files.xSpec, 'attachment', 200);
     // 被拒绝的访问不记
     await content(portalA, files.ySpec, 'attachment', 403);
+    // 内部页面自动加载的缩略图不记；供应商带上同样的参数照样记
+    await buyer
+      .get(`/api/files/${files.xImage}/content`)
+      .query({ disposition: 'inline', thumbnail: 'true' })
+      .expect(200);
+    expect(await ctx.prisma.fileAccessLog.count()).toBe(3);
+    await portalA
+      .get(`/api/files/${files.xImage}/content`)
+      .query({ disposition: 'inline', thumbnail: 'true' })
+      .expect(200);
+    expect(await ctx.prisma.fileAccessLog.count()).toBe(4);
+    await ctx.prisma.fileAccessLog.deleteMany({ where: { fileId: files.xImage, action: 'PREVIEW' } });
 
     const logs = await ctx.prisma.fileAccessLog.findMany({ orderBy: { createdAt: 'asc' } });
     expect(logs.map((l) => [l.fileId, l.action, l.supplierId, l.inquiryId, l.userId])).toEqual([

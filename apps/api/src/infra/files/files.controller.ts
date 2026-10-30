@@ -64,7 +64,15 @@ export class FilesController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
     const { file, decision } = await this.files.authorize(user, id);
-    await this.files.logAccess(user, file, decision, query.disposition === 'inline' ? 'PREVIEW' : 'DOWNLOAD');
+    // 内部页面自动加载的缩略图不算预览；供应商的每次访问都记（R08-3）
+    if (!(query.thumbnail && user.userType === 'INTERNAL')) {
+      await this.files.logAccess(
+        user,
+        file,
+        decision,
+        query.disposition === 'inline' ? 'PREVIEW' : 'DOWNLOAD',
+      );
+    }
     res.set({
       'Content-Type': file.mimeType,
       'Content-Length': String(file.size),
