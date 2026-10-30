@@ -10,8 +10,10 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 
 /**
- * 询价附件（规格书、产品图）的访问判断：内部用户有 inquiry:view、且数据权限覆盖任一引用它的询价单即可访问，
- * 不记访问日志。供应商侧（只能访问自己受邀轮次的附件，并记下载日志）在 M08 补充，目前一律拒绝
+ * 询价附件（规格书、产品图）的访问判断，预览和下载都写 FileAccessLog（R08-3）：
+ * - 内部用户：有 inquiry:view、且数据权限覆盖任一引用它的询价单（日志里 supplierId 为空）；
+ * - 供应商：只能访问自己有报价单的轮次的附件（05 §7.2 P-3；报价单只在发布、补充邀请时创建，
+ *   作废的旧轮次照样能看，P-4），别的一律 FILE_ACCESS_DENIED（R08-5）
  */
 @Injectable()
 export class InquiryFileResolver implements FileAccessResolver, OnModuleInit {
@@ -30,15 +32,36 @@ export class InquiryFileResolver implements FileAccessResolver, OnModuleInit {
   async resolve(file: FileObject, user: AuthUser): Promise<FileAccessDecision | null> {
     const links = await this.prisma.inquiryFile.findMany({
       where: { fileId: file.id },
-      select: { round: { select: { inquiryId: true } } },
+      select: { roundId: true, round: { select: { inquiryId: true } } },
     });
     if (links.length === 0) return null;
-    if (user.userType !== 'INTERNAL' || !user.permissions.has('inquiry:view')) return { allow: false };
-    const inquiryIds = [...new Set(links.map((l) => l.round.inquiryId))];
-    const visible = await this.prisma.inquiry.count({
-      where: { AND: [{ id: { in: inquiryIds } }, this.scope.inquiryWhere(user)] },
+
+    if (user.userType === 'SUPPLIER') {
+      if (!user.supplierId) return { allow: false };
+      const quote = await this.prisma.quote.findFirst({
+        where: {
+          supplierId: user.supplierId,
+          roundId: { in: [...new Set(links.map((l) => l.roundId))] },
+          round: { publishedAt: { not: null } },
+        },
+        select: { round: { select: { inquiryId: true } } },
+      });
+      if (!quote) return { allow: false };
+      return { allow: true, log: { inquiryId: quote.round.inquiryId, supplierId: user.supplierId } };
+    }
+
+    if (!user.permissions.has('inquiry:view')) return { allow: false };
+    const visible = await this.prisma.inquiry.findFirst({
+      where: {
+        AND: [
+          { id: { in: [...new Set(links.map((l) => l.round.inquiryId))] } },
+          this.scope.inquiryWhere(user),
+        ],
+      },
+      select: { id: true },
     });
-    return { allow: visible > 0 };
+    if (!visible) return { allow: false };
+    return { allow: true, log: { inquiryId: visible.id, supplierId: null } };
   }
 
   async isReferenced(fileId: string): Promise<boolean> {

@@ -410,7 +410,7 @@ describe('M07 邀请发布与邮件通知', () => {
         currentDeadline: deadline.toISOString(),
         currentRound: { status: 'WAITING_QUOTES', publishedAt: START.toISOString() },
       });
-      expect(detail.allowedActions).toEqual(['lateInvite', 'remind', 'extendDeadline']);
+      expect(detail.allowedActions).toEqual(['lateInvite', 'remind', 'extendDeadline', 'viewAccessLog']);
 
       const round = await roundOf(buyer, detail.id);
       // LED-2835 继承上级 LED 绑定的 PPL-LED
@@ -744,7 +744,10 @@ describe('M07 邀请发布与邮件通知', () => {
       ctx.clock.set(at(3 * HOUR));
       await applyRound(round.id, 'closeEarly', { data: { quotesClosedAt: at(3 * HOUR), closedEarly: true } });
       let current = await detailOf(buyer, detail.id);
-      expect(current).toMatchObject({ displayStatus: 'QUOTES_CLOSED', allowedActions: ['extendDeadline'] });
+      expect(current).toMatchObject({
+        displayStatus: 'QUOTES_CLOSED',
+        allowedActions: ['extendDeadline', 'viewAccessLog'],
+      });
 
       // 晚于原截止但早于 现在 + 1 小时
       await extend(buyer, detail.id, at(3.5 * HOUR), 400);
@@ -774,7 +777,7 @@ describe('M07 邀请发布与邮件通知', () => {
         docStatus: 'CANCELLED',
         displayStatus: 'CANCELLED',
         currentRoundStatus: 'CANCELLED',
-        allowedActions: [],
+        allowedActions: ['viewAccessLog'],
       });
       const quotes = await ctx.prisma.quote.findMany({ where: { round: { inquiryId: detail.id } } });
       expect(quotes.map((q) => q.status)).toEqual(['VOID', 'VOID', 'VOID']);

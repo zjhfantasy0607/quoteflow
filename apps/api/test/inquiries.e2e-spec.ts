@@ -1001,7 +1001,8 @@ describe('M06 询价单与审批', () => {
           cancelledAt: ctx.clock.now().toISOString(),
           currentRoundStatus: 'CANCELLED',
           currentRound: { status: 'CANCELLED' },
-          allowedActions: [],
+          // 取消后只剩查看下载日志（R08-4）
+          allowedActions: ['viewAccessLog'],
         });
       }
       // 已取消的不能再取消，也不能提交
@@ -1127,26 +1128,27 @@ describe('M06 询价单与审批', () => {
         pdUserId: users.pd.id,
       });
       const actions = async (agent: Agent) => (await detailOf(agent, draft.id)).allowedActions;
-      // M07 起采购员、采购主管在第 1 轮发布前还能维护受邀名单、审批通过后发布
+      // M07 起采购员、采购主管在第 1 轮发布前还能维护受邀名单、审批通过后发布；M08 起任何状态都能看下载日志
       expect(await actions(pd)).toEqual(['edit', 'submit']);
-      expect(await actions(buyer)).toEqual(['edit', 'submit', 'editInvitees']);
-      expect(await actions(manager)).toEqual(['edit', 'submit', 'editInvitees', 'cancel']);
+      expect(await actions(buyer)).toEqual(['edit', 'submit', 'editInvitees', 'viewAccessLog']);
+      expect(await actions(manager)).toEqual(['edit', 'submit', 'editInvitees', 'cancel', 'viewAccessLog']);
 
       await addManualLine(pd, draft.id, category.LED);
       await pd.post(`/api/inquiries/${draft.id}/submit`).expect(200);
       expect(await actions(pd)).toEqual([]);
-      expect(await actions(buyer)).toEqual([]);
-      expect(await actions(manager)).toEqual(['approve', 'reject', 'cancel']);
+      expect(await actions(buyer)).toEqual(['viewAccessLog']);
+      expect(await actions(manager)).toEqual(['approve', 'reject', 'cancel', 'viewAccessLog']);
 
       await manager.post(`/api/inquiries/${draft.id}/approve`).send({}).expect(200);
       expect(await actions(pd)).toEqual([]);
-      expect(await actions(buyer)).toEqual(['editInvitees', 'publish']);
-      expect(await actions(manager)).toEqual(['editInvitees', 'publish', 'cancel']);
+      expect(await actions(buyer)).toEqual(['editInvitees', 'publish', 'viewAccessLog']);
+      expect(await actions(manager)).toEqual(['editInvitees', 'publish', 'cancel', 'viewAccessLog']);
       // 轮次详情的 edit 与单据一致
       expect((await roundOf(manager, draft.id)).allowedActions).toEqual([
         'editInvitees',
         'publish',
         'cancel',
+        'viewAccessLog',
       ]);
     });
   });

@@ -1,0 +1,116 @@
+import type { FileAccessAction, QuoteStatus, RoundStatus, SupplierLanguage } from '../enums';
+import type { PortalQuoteAction } from '../inquiry-actions';
+import type { InquiryFileKind } from '../schemas/inquiries';
+import type { FileDto } from './infra';
+
+// 供应商门户（M08）。门户里不出现内部信息（05 §7.2 P-5）：项目号、草稿号、审批记录、其他供应商、
+// 询价行的备注（按"内部备注"处理）、供应商分类和内部备注都不返回
+
+/** "我的询价"列表的一项（一张报价单 = 本供应商在某一轮的报价） */
+export interface PortalQuoteListItemDto {
+  /** 报价单 id，详情页用它 */
+  id: string;
+  inquiry: { formalNo: string; title: string; currency: string };
+  roundNo: number;
+  roundStatus: RoundStatus;
+  deadline: string | null;
+  /** 我的状态 */
+  status: QuoteStatus;
+  invitedAt: string;
+  firstViewedAt: string | null;
+  lastSubmittedAt: string | null;
+}
+
+/** 规格书、产品图的一条挂载 */
+export interface PortalFileDto {
+  id: string;
+  kind: InquiryFileKind;
+  file: FileDto;
+}
+
+export interface PortalLineDto {
+  id: string;
+  lineNo: number;
+  materialCode: string | null;
+  nameZh: string;
+  nameEn: string | null;
+  spec: string;
+  /** 字典 unit */
+  unitCode: string;
+  /** 十进制字符串 */
+  quantity: string;
+  brand: string | null;
+  drawingRef: string | null;
+  category: { code: string; nameZh: string; nameEn: string };
+  files: PortalFileDto[];
+}
+
+/** GET /api/portal/quotes/:quoteId（R08-7） */
+export interface PortalQuoteDetailDto {
+  id: string;
+  status: QuoteStatus;
+  invitedAt: string;
+  firstViewedAt: string | null;
+  respondedAt: string | null;
+  lastSubmittedAt: string | null;
+  declinedAt: string | null;
+  /** 字典 decline_reason */
+  declineReasonCode: string | null;
+  declineReason: string | null;
+  inquiry: {
+    formalNo: string;
+    title: string;
+    /** 字典 currency */
+    currency: string;
+    description: string | null;
+    /** 采购联系人：询价负责人的姓名和邮箱 */
+    buyer: { name: string; email: string | null };
+    /** 询价已取消时的时间和原因（取消通知邮件里也写了原因） */
+    cancelledAt: string | null;
+    cancelReason: string | null;
+  };
+  round: {
+    roundNo: number;
+    status: RoundStatus;
+    deadline: string | null;
+    publishedAt: string | null;
+    /** 第 2 轮起：变更原因和主要变更内容 */
+    changeReason: string | null;
+    changeSummary: string | null;
+    pplTemplateVersion: number | null;
+    pplVariantCode: string | null;
+  };
+  lines: PortalLineDto[];
+  /** 整单附件（规格书） */
+  files: PortalFileDto[];
+  /** M09 起有内容 */
+  allowedActions: PortalQuoteAction[];
+}
+
+/** GET /api/portal/profile：本供应商的企业资料（只读） */
+export interface SupplierProfileDto {
+  code: string;
+  nameZh: string;
+  nameEn: string | null;
+  creditCode: string | null;
+  /** 主营材料分类 */
+  materialCategories: { code: string; nameZh: string; nameEn: string }[];
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string | null;
+  ccEmails: string[];
+  preferredLanguage: SupplierLanguage;
+  country: string | null;
+  address: string | null;
+}
+
+/** GET /api/inquiries/:id/file-access-logs（R08-4） */
+export interface FileAccessLogDto {
+  id: string;
+  createdAt: string;
+  action: FileAccessAction;
+  file: { id: string; originalName: string };
+  user: { id: string; name: string } | null;
+  /** 内部用户访问时为 null */
+  supplier: { id: string; code: string; nameZh: string; nameEn: string | null } | null;
+}

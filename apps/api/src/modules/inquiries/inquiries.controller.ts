@@ -44,6 +44,7 @@ import {
   type CreateInquiryInput,
   type CreateLineInput,
   type ExtendDeadlineInput,
+  type FileAccessLogDto,
   type ImportResultDto,
   type InquiryApprovalDto,
   type InquiryDetailDto,
@@ -221,6 +222,17 @@ export class InquiriesController {
   @Get(':id/timeline')
   timeline(@CurrentUser() user: AuthUser, @Param('id') id: string): Promise<AuditLogDto[]> {
     return this.inquiries.timeline(user, id);
+  }
+
+  /** 规格下载日志（R08-4） */
+  @RequirePermissions('inquiry:accessLog')
+  @Get(':id/file-access-logs')
+  fileAccessLogs(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Query(new ZodValidationPipe(pageQuerySchema)) query: PageQuery,
+  ): Promise<Paginated<FileAccessLogDto>> {
+    return this.inquiries.fileAccessLogs(user, id, query);
   }
 
   /** 受邀名单 + 门户账号状态（R07-6） */

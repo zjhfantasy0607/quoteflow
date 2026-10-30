@@ -5,6 +5,7 @@ import {
   isRoundEditable,
   type AuditLogDto,
   type CreateInquiryInput,
+  type FileAccessLogDto,
   type InquiryApprovalDto,
   type InquiryDetailDto,
   type InquiryListItemDto,
@@ -272,6 +273,46 @@ export class InquiriesService {
   async timeline(user: AuthUser, id: string): Promise<AuditLogDto[]> {
     await this.access.findOrThrow(this.prisma, user, id);
     return this.audit.listForEntity('inquiry', id);
+  }
+
+  /** 规格下载日志（R08-4）：供应商和内部用户的预览、下载，新的在前 */
+  async fileAccessLogs(user: AuthUser, id: string, query: PageQuery): Promise<Paginated<FileAccessLogDto>> {
+    await this.access.findOrThrow(this.prisma, user, id);
+    const where: Prisma.FileAccessLogWhereInput = { inquiryId: id };
+    const [rows, total] = await Promise.all([
+      this.prisma.fileAccessLog.findMany({
+        where,
+        include: { file: { select: { id: true, originalName: true } } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        ...skipTake(query),
+      }),
+      this.prisma.fileAccessLog.count({ where }),
+    ]);
+    const unique = (ids: (string | null)[]) => [...new Set(ids.filter((v): v is string => !!v))];
+    const [users, suppliers] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { id: { in: unique(rows.map((r) => r.userId)) } },
+        select: { id: true, name: true },
+      }),
+      this.prisma.supplier.findMany({
+        where: { id: { in: unique(rows.map((r) => r.supplierId)) } },
+        select: { id: true, code: true, nameZh: true, nameEn: true },
+      }),
+    ]);
+    const userById = new Map(users.map((u) => [u.id, u]));
+    const supplierById = new Map(suppliers.map((s) => [s.id, s]));
+    return toPaginated(
+      rows.map((r) => ({
+        id: r.id,
+        createdAt: r.createdAt.toISOString(),
+        action: r.action,
+        file: r.file,
+        user: userById.get(r.userId) ?? null,
+        supplier: r.supplierId ? (supplierById.get(r.supplierId) ?? null) : null,
+      })),
+      total,
+      query,
+    );
   }
 
   async userOptions(): Promise<InquiryUserOptionDto[]> {

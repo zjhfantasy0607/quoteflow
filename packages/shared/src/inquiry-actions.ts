@@ -24,6 +24,17 @@ export const INQUIRY_ACTIONS = [
 ] as const;
 export type InquiryAction = (typeof INQUIRY_ACTIONS)[number];
 
+/** 门户报价单详情的 allowedActions（docs/03 §6），M09 起由 computePortalQuoteActions() 生成 */
+export const PORTAL_QUOTE_ACTIONS = [
+  'saveDraft',
+  'submit',
+  'decline',
+  'downloadTemplate',
+  'importExcel',
+  'respondNegotiation',
+] as const;
+export type PortalQuoteAction = (typeof PORTAL_QUOTE_ACTIONS)[number];
+
 export interface InquiryActionContext {
   docStatus: InquiryDocStatus;
   currentRoundNo: number;
@@ -56,7 +67,7 @@ export function isRoundEditable(
  * 保证"按钮显示"和"接口放行"一致。数据权限不在这里判断（范围外的单据直接 404）。
  * 轮次类动作（发布、补充邀请、催报、延期）都针对当前轮次。
  * M06 覆盖 edit、submit、approve、reject、发布前的 cancel；M07 覆盖 editInvitees、publish、lateInvite、
- * remind、extendDeadline 和发布后的 cancel；其余动作由 M10 起的模块补充。
+ * remind、extendDeadline 和发布后的 cancel；M08 覆盖 viewAccessLog；其余动作由 M10 起的模块补充。
  */
 export function computeInquiryActions(ctx: InquiryActionContext, perms: PermissionChecker): InquiryAction[] {
   const can = (code: PermissionCode) => perms.has(code);
@@ -91,5 +102,7 @@ export function computeInquiryActions(ctx: InquiryActionContext, perms: Permissi
   ];
   if (cancellable.includes(ctx.docStatus) && round !== RoundStatus.EVALUATED && can('inquiry:cancel'))
     actions.push('cancel');
+  // R08-4：规格下载日志，任何状态都能看（内部用户的访问也记录）
+  if (can('inquiry:accessLog')) actions.push('viewAccessLog');
   return actions;
 }

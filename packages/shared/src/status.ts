@@ -132,3 +132,15 @@ export const QUOTE_VOIDABLE_STATUSES: readonly QuoteStatus[] = [
   QuoteStatus.DECLINED,
   QuoteStatus.EVALUATING,
 ];
+
+// ---------- 供应商门户"我的询价"页签（M08 R08-1） ----------
+
+export const PORTAL_QUOTE_TABS = ['pending', 'evaluating', 'closed'] as const;
+export type PortalQuoteTab = (typeof PORTAL_QUOTE_TABS)[number];
+
+/** 页签 → 报价单所在轮次的状态：待处理 / 评标中 / 已结束（作废的旧轮次、取消的询价也在已结束里） */
+export const PORTAL_QUOTE_TAB_ROUND_STATUSES: Record<PortalQuoteTab, readonly RoundStatus[]> = {
+  pending: [RoundStatus.WAITING_QUOTES],
+  evaluating: [RoundStatus.QUOTES_CLOSED, RoundStatus.OPENED],
+  closed: [RoundStatus.EVALUATED, RoundStatus.SUPERSEDED, RoundStatus.CANCELLED],
+};

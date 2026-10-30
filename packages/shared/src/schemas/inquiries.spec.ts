@@ -118,10 +118,14 @@ describe('R06-2 询价行', () => {
 });
 
 describe('allowedActions（03 §6）', () => {
+  /** 与状态有关的动作（下载日志在任何状态都能看，单独测） */
+  const stateActions = (c: ReturnType<typeof ctx>, role: string) =>
+    computeInquiryActions(c, perms(role)).filter((a) => a !== 'viewAccessLog');
+
   it('草稿：PD、采购员可以编辑和提交，采购员还能维护受邀名单；采购主管还能取消', () => {
-    expect(computeInquiryActions(ctx('DRAFT'), perms('PD'))).toEqual(['edit', 'submit']);
-    expect(computeInquiryActions(ctx('DRAFT'), perms('BUYER'))).toEqual(['edit', 'submit', 'editInvitees']);
-    expect(computeInquiryActions(ctx('DRAFT'), perms('PURCHASE_MANAGER'))).toEqual([
+    expect(stateActions(ctx('DRAFT'), 'PD')).toEqual(['edit', 'submit']);
+    expect(stateActions(ctx('DRAFT'), 'BUYER')).toEqual(['edit', 'submit', 'editInvitees']);
+    expect(stateActions(ctx('DRAFT'), 'PURCHASE_MANAGER')).toEqual([
       'edit',
       'submit',
       'editInvitees',
@@ -130,9 +134,9 @@ describe('allowedActions（03 §6）', () => {
   });
 
   it('待审批：只有采购主管能通过、驳回、取消；R07-2 待审批时不能改受邀名单', () => {
-    expect(computeInquiryActions(ctx('PENDING_APPROVAL'), perms('PD'))).toEqual([]);
-    expect(computeInquiryActions(ctx('PENDING_APPROVAL'), perms('BUYER'))).toEqual([]);
-    expect(computeInquiryActions(ctx('PENDING_APPROVAL'), perms('PURCHASE_MANAGER'))).toEqual([
+    expect(stateActions(ctx('PENDING_APPROVAL'), 'PD')).toEqual([]);
+    expect(stateActions(ctx('PENDING_APPROVAL'), 'BUYER')).toEqual([]);
+    expect(stateActions(ctx('PENDING_APPROVAL'), 'PURCHASE_MANAGER')).toEqual([
       'approve',
       'reject',
       'cancel',
@@ -140,23 +144,19 @@ describe('allowedActions（03 §6）', () => {
   });
 
   it('R07-2、R07-3 已通过、未发布：采购员维护名单和发布，采购主管还能取消', () => {
-    expect(computeInquiryActions(ctx('APPROVED'), perms('PD'))).toEqual([]);
-    expect(computeInquiryActions(ctx('APPROVED'), perms('BUYER'))).toEqual(['editInvitees', 'publish']);
-    expect(computeInquiryActions(ctx('APPROVED'), perms('PURCHASE_MANAGER'))).toEqual([
-      'editInvitees',
-      'publish',
-      'cancel',
-    ]);
+    expect(stateActions(ctx('APPROVED'), 'PD')).toEqual([]);
+    expect(stateActions(ctx('APPROVED'), 'BUYER')).toEqual(['editInvitees', 'publish']);
+    expect(stateActions(ctx('APPROVED'), 'PURCHASE_MANAGER')).toEqual(['editInvitees', 'publish', 'cancel']);
   });
 
   it('R07-7、R07-8、R07-10 等待报价：补充邀请、催报、延期；名单只读，不能再发布', () => {
-    expect(computeInquiryActions(ctx('APPROVED', 'WAITING_QUOTES'), perms('PD'))).toEqual([]);
-    expect(computeInquiryActions(ctx('APPROVED', 'WAITING_QUOTES'), perms('BUYER'))).toEqual([
+    expect(stateActions(ctx('APPROVED', 'WAITING_QUOTES'), 'PD')).toEqual([]);
+    expect(stateActions(ctx('APPROVED', 'WAITING_QUOTES'), 'BUYER')).toEqual([
       'lateInvite',
       'remind',
       'extendDeadline',
     ]);
-    expect(computeInquiryActions(ctx('APPROVED', 'WAITING_QUOTES'), perms('PURCHASE_MANAGER'))).toEqual([
+    expect(stateActions(ctx('APPROVED', 'WAITING_QUOTES'), 'PURCHASE_MANAGER')).toEqual([
       'lateInvite',
       'remind',
       'extendDeadline',
@@ -165,26 +165,31 @@ describe('allowedActions（03 §6）', () => {
   });
 
   it('R07-10 报价完成后只能延期（和取消），不能补充邀请、催报', () => {
-    expect(computeInquiryActions(ctx('APPROVED', 'QUOTES_CLOSED'), perms('BUYER'))).toEqual([
-      'extendDeadline',
-    ]);
-    expect(computeInquiryActions(ctx('APPROVED', 'QUOTES_CLOSED'), perms('PURCHASE_MANAGER'))).toEqual([
+    expect(stateActions(ctx('APPROVED', 'QUOTES_CLOSED'), 'BUYER')).toEqual(['extendDeadline']);
+    expect(stateActions(ctx('APPROVED', 'QUOTES_CLOSED'), 'PURCHASE_MANAGER')).toEqual([
       'extendDeadline',
       'cancel',
     ]);
   });
 
   it('R07-11 发布后也能取消，评标完成后、已取消的不能', () => {
-    expect(computeInquiryActions(ctx('APPROVED', 'OPENED'), perms('PURCHASE_MANAGER'))).toContain('cancel');
-    expect(computeInquiryActions(ctx('APPROVED', 'EVALUATED'), perms('PURCHASE_MANAGER'))).not.toContain(
-      'cancel',
-    );
-    expect(computeInquiryActions(ctx('CANCELLED', 'CANCELLED'), perms('PURCHASE_MANAGER'))).toEqual([]);
+    expect(stateActions(ctx('APPROVED', 'OPENED'), 'PURCHASE_MANAGER')).toContain('cancel');
+    expect(stateActions(ctx('APPROVED', 'EVALUATED'), 'PURCHASE_MANAGER')).not.toContain('cancel');
+    expect(stateActions(ctx('CANCELLED', 'CANCELLED'), 'PURCHASE_MANAGER')).toEqual([]);
   });
 
   it('只有管理员的查看权限时没有任何动作', () => {
     for (const round of ['DRAFT', 'WAITING_QUOTES', 'QUOTES_CLOSED'] as const) {
       expect(computeInquiryActions(ctx('APPROVED', round), perms('ADMIN'))).toEqual([]);
+    }
+  });
+
+  it('R08-4 有 inquiry:accessLog 的人在任何状态都能看下载日志', () => {
+    const states = [ctx('DRAFT'), ctx('APPROVED', 'WAITING_QUOTES'), ctx('CANCELLED', 'CANCELLED')];
+    for (const c of states) {
+      expect(computeInquiryActions(c, perms('BUYER'))).toContain('viewAccessLog');
+      expect(computeInquiryActions(c, perms('PURCHASE_MANAGER'))).toContain('viewAccessLog');
+      expect(computeInquiryActions(c, perms('PD'))).not.toContain('viewAccessLog');
     }
   });
 
