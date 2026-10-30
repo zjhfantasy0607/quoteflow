@@ -8,6 +8,7 @@ import {
 } from '@quoteflow/shared';
 import type { AuthUser } from '../../common/auth/auth-user';
 import { RequirePermissions } from '../../common/auth/decorators';
+import { ClockService } from '../../common/clock/clock.service';
 import { skipTake, toPaginated } from '../../common/pagination';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { inAppTz } from '../../common/time';
@@ -55,11 +56,16 @@ function toAuditLogDto(r: Prisma.AuditLogGetPayload<{ include: typeof auditInclu
 
 @Injectable()
 export class AuditService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly clock: ClockService,
+  ) {}
 
+  /** 时间取 ClockService（演示数据用时钟偏移造的历史操作，日志时间与业务时间一致） */
   async log(entry: AuditEntry, client: Client = this.prisma): Promise<void> {
     await client.auditLog.create({
       data: {
+        createdAt: this.clock.now(),
         actorId: entry.actor?.id ?? null,
         actorType: entry.actor?.userType ?? entry.actorType ?? null,
         action: entry.action,
@@ -91,7 +97,7 @@ export class AuditService {
       this.prisma.auditLog.findMany({
         where,
         include: auditInclude,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         ...skipTake(q),
       }),
       this.prisma.auditLog.count({ where }),

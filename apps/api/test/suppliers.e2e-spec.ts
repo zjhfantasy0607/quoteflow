@@ -38,7 +38,10 @@ describe('M04 供应商', () => {
   }
 
   async function auditActions(entityId: string): Promise<string[]> {
-    const rows = await ctx.prisma.auditLog.findMany({ where: { entityId }, orderBy: { createdAt: 'asc' } });
+    const rows = await ctx.prisma.auditLog.findMany({
+      where: { entityId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
     return rows.map((r) => r.action);
   }
 

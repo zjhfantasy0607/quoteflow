@@ -436,7 +436,7 @@ describe('M06 询价单与审批', () => {
       });
       const log = await ctx.prisma.auditLog.findFirstOrThrow({
         where: { entityId: draft.id, action: 'inquiryLine.update' },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
       expect(Object.keys((log.detail as { changes: object }).changes).sort()).toEqual(
         ['categoryId', 'nameZh', 'quantity', 'unitCode'].sort(),
