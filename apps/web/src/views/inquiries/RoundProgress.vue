@@ -32,14 +32,15 @@ const steps = computed(() => {
   const r = props.round;
   const times = [r.publishedAt, r.quotesClosedAt, r.openedAt, r.evaluatedAt];
   return STEPS.map((status, i) => {
-    let description = '';
+    let when = '';
+    let note = '';
     if (i < reached.value && times[i]) {
-      description = time(times[i]);
-      if (status === 'QUOTES_CLOSED' && r.closedEarly) description += ` · ${t('inquiries.progress.closedEarly')}`;
+      when = time(times[i]);
+      if (status === 'QUOTES_CLOSED' && r.closedEarly) note = t('inquiries.progress.closedEarly');
     } else if (status === 'QUOTES_CLOSED' && r.deadline && !stopped.value) {
-      description = t('inquiries.progress.deadline', { time: time(r.deadline) });
+      when = t('inquiries.progress.deadline', { time: time(r.deadline) });
     }
-    return { status, title: t(`enums.RoundStatus.${status}`), description };
+    return { status, title: t(`enums.RoundStatus.${status}`), when, note };
   });
 });
 </script>
@@ -52,7 +53,12 @@ const steps = computed(() => {
       :process-status="stopped ? 'error' : 'process'"
       align-center
     >
-      <el-step v-for="s in steps" :key="s.status" :title="s.title" :description="s.description" />
+      <el-step v-for="s in steps" :key="s.status" :title="s.title">
+        <template #description>
+          <div v-if="s.when">{{ s.when }}</div>
+          <div v-if="s.note">{{ s.note }}</div>
+        </template>
+      </el-step>
     </el-steps>
     <div v-if="stopped" class="stopped">
       {{ t('inquiries.progress.stopped', { status: t(`enums.RoundStatus.${round.status}`) }) }}
@@ -63,6 +69,11 @@ const steps = computed(() => {
 <style scoped>
 .round-progress {
   padding: 4px 0;
+}
+/* 居中模式下说明只占步骤宽度的 60%，时间会在"北京时间"中间折行；放宽到几乎整个步骤 */
+.round-progress :deep(.el-step.is-center .el-step__description) {
+  padding-right: 4%;
+  padding-left: 4%;
 }
 .stopped {
   margin-top: 8px;

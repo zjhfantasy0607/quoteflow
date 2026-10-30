@@ -173,6 +173,7 @@ export default {
     deadlineValue: '{time}（{left}）',
     deadlineLeft: '剩余 {time}',
     deadlinePassed: '已截止',
+    deadlineClosedEarly: '已提前截止',
     noApprovals: '还没有审批记录',
     noLogs: '暂无记录',
     logFields: { time: '时间', actor: '操作人', action: '动作', summary: '摘要' },

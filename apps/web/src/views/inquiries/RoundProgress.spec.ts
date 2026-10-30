@@ -62,7 +62,8 @@ describe('RoundProgress', () => {
       }),
     );
     expect(items.map((i) => i.status)).toEqual(['success', 'success', 'process', 'wait']);
-    expect(items[1].description).toBe('2026-11-03 09:00 北京时间 · 提前截止');
+    // 时间和"提前截止"分两行显示
+    expect(items[1].description).toBe('2026-11-03 09:00 北京时间提前截止');
     expect(items[2].description).toBe('2026-11-03 10:00 北京时间');
   });
 

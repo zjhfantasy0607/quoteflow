@@ -66,14 +66,22 @@ const tabs = computed(() => [
   ...(can('viewAccessLog') ? ['accessLogs'] : []),
   'logs',
 ]);
+/** 只有等待报价时才显示剩余时间；提前截止的注明提前截止（之后截止时间还没到，不能再显示"剩余"） */
 const deadlineText = computed(() => {
   const deadline = inquiry.value?.currentDeadline;
   if (!deadline) return t('inquiries.detail.deadlineNotSet');
+  const round = inquiry.value!.currentRound;
+  const time = `${formatDateTime(deadline)} ${t('common.tz')}`;
   const left = remainingText(deadline);
-  return t('inquiries.detail.deadlineValue', {
-    time: `${formatDateTime(deadline)} ${t('common.tz')}`,
-    left: left ? t('inquiries.detail.deadlineLeft', { time: left }) : t('inquiries.detail.deadlinePassed'),
-  });
+  let state: string | null;
+  if (round.status === 'WAITING_QUOTES') {
+    state = left ? t('inquiries.detail.deadlineLeft', { time: left }) : t('inquiries.detail.deadlinePassed');
+  } else if (round.closedEarly) {
+    state = t('inquiries.detail.deadlineClosedEarly');
+  } else {
+    state = left ? null : t('inquiries.detail.deadlinePassed');
+  }
+  return state ? t('inquiries.detail.deadlineValue', { time, left: state }) : time;
 });
 
 async function loadRound(): Promise<void> {

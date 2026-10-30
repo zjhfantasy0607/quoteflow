@@ -179,6 +179,7 @@ const inquiries: LocaleMessages['inquiries'] = {
     deadlineValue: '{time} ({left})',
     deadlineLeft: '{time} left',
     deadlinePassed: 'Closed',
+    deadlineClosedEarly: 'Closed early',
     noApprovals: 'No approval history yet',
     noLogs: 'No records',
     logFields: { time: 'Time', actor: 'By', action: 'Action', summary: 'Summary' },
@@ -256,7 +257,7 @@ const inquiries: LocaleMessages['inquiries'] = {
       declineReason: 'Decline reason',
     },
     noResponse: 'No response',
-    viewQuote: 'View quotation',
+    viewQuote: 'View',
     closeEarly: 'Close early',
     closeEarlyHint: '{count} supplier(s) have not responded. The round can be closed early only after all have submitted or declined',
     closeEarlyConfirm:

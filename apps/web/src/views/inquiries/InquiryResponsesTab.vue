@@ -149,12 +149,14 @@ watch(() => props.inquiry, load, { immediate: true });
       <el-table-column
         v-if="canRemind"
         type="selection"
-        width="48"
+        width="44"
+        fixed="left"
         :selectable="(row: QuoteResponseDto) => row.status === 'INVITED'"
       />
       <el-table-column
         :label="t('inquiries.responses.fields.supplier')"
-        min-width="200"
+        width="160"
+        fixed="left"
         show-overflow-tooltip
       >
         <template #default="{ row }">
@@ -173,7 +175,7 @@ watch(() => props.inquiry, load, { immediate: true });
           </el-tooltip>
         </template>
       </el-table-column>
-      <el-table-column :label="t('inquiries.responses.fields.status')" width="150">
+      <el-table-column :label="t('inquiries.responses.fields.status')" width="140">
         <template #default="{ row }">
           <el-tag v-if="noResponse(row)" type="info" effect="plain" disable-transitions>
             {{ t('inquiries.responses.noResponse') }}
@@ -184,34 +186,24 @@ watch(() => props.inquiry, load, { immediate: true });
           </span>
         </template>
       </el-table-column>
-      <el-table-column :label="t('inquiries.responses.fields.invitedAt')" width="150">
+      <el-table-column :label="t('inquiries.responses.fields.invitedAt')" width="125" class-name="dense">
         <template #default="{ row }">{{ formatDateTime(row.invitedAt) }}</template>
       </el-table-column>
-      <el-table-column :label="t('inquiries.responses.fields.firstViewedAt')" width="150">
+      <el-table-column :label="t('inquiries.responses.fields.firstViewedAt')" width="125" class-name="dense">
         <template #default="{ row }">{{ formatDateTime(row.firstViewedAt) || '—' }}</template>
       </el-table-column>
-      <el-table-column :label="t('inquiries.responses.fields.respondedAt')" width="150">
+      <el-table-column :label="t('inquiries.responses.fields.respondedAt')" width="125" class-name="dense">
         <template #default="{ row }">{{ formatDateTime(row.respondedAt) || '—' }}</template>
       </el-table-column>
       <el-table-column
         prop="versionCount"
         :label="t('inquiries.responses.fields.versionCount')"
-        width="90"
+        width="84"
         align="right"
       />
-      <el-table-column :label="t('inquiries.responses.fields.total')" width="170" align="right">
-        <template #default="{ row }">
-          <MaskedValue :masked="sealed || !!row.maskedFields?.includes('totalAmount')">
-            <span v-if="row.totalAmount" class="amount">
-              {{ row.currency }} {{ formatMoney(row.totalAmount, 2) }}
-            </span>
-            <span v-else>—</span>
-          </MaskedValue>
-        </template>
-      </el-table-column>
       <el-table-column
         :label="t('inquiries.responses.fields.declineReason')"
-        min-width="180"
+        min-width="120"
         show-overflow-tooltip
       >
         <template #default="{ row }">
@@ -221,7 +213,18 @@ watch(() => props.inquiry, load, { immediate: true });
           </template>
         </template>
       </el-table-column>
-      <el-table-column v-if="canViewQuote" :label="t('common.table.actions')" width="110" fixed="right">
+      <!-- 合计和操作固定在右侧、供应商固定在左侧：窄屏横向滚动时也能看到 -->
+      <el-table-column :label="t('inquiries.responses.fields.total')" width="140" align="right" fixed="right">
+        <template #default="{ row }">
+          <MaskedValue :masked="sealed || !!row.maskedFields?.includes('totalAmount')">
+            <span v-if="row.totalAmount" class="amount">
+              {{ row.currency }} {{ formatMoney(row.totalAmount, 2) }}
+            </span>
+            <span v-else>—</span>
+          </MaskedValue>
+        </template>
+      </el-table-column>
+      <el-table-column v-if="canViewQuote" :label="t('common.table.actions')" width="90" fixed="right">
         <template #default="{ row }">
           <router-link
             v-if="row.versionCount > 0"
@@ -282,6 +285,10 @@ watch(() => props.inquiry, load, { immediate: true });
 }
 .reason {
   margin-left: 6px;
+}
+/* 时间列收窄内边距，1440 宽时整张表不出现横向滚动 */
+:deep(.dense .cell) {
+  padding: 0 8px;
 }
 .view-link {
   color: var(--el-color-primary);

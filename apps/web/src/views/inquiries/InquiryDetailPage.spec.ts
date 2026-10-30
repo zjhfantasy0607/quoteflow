@@ -219,7 +219,7 @@ describe('InquiryDetailPage', () => {
     w.unmount();
   });
 
-  it('R10-3 报价完成时显示进度条和"开标"按钮，确认后开标并切到供应商响应', async () => {
+  it('R10-2 R10-3 提前截止后显示进度条和"开标"按钮，确认后开标并切到供应商响应', async () => {
     const closedRound = {
       id: 'r1',
       roundNo: 1,
@@ -227,7 +227,7 @@ describe('InquiryDetailPage', () => {
       deadline: '2026-11-05T02:00:00.000Z',
       publishedAt: '2026-11-02T01:00:00.000Z',
       quotesClosedAt: '2026-11-05T02:00:00.000Z',
-      closedEarly: false,
+      closedEarly: true,
       openedAt: null,
       evaluatedAt: null,
       lineCount: 1,
@@ -250,6 +250,9 @@ describe('InquiryDetailPage', () => {
     });
     const w = await mountPage(closed as unknown as InquiryDetailDto);
     expect(w.find('.round-progress').text()).toContain('报价完成');
+    // 提前截止后截止时间还没到，不再显示剩余时间
+    expect(w.text()).toContain('2026-11-05 10:00 北京时间（已提前截止）');
+    expect(w.text()).not.toContain('剩余');
     expect(buttonTexts(w)).toContain('开标');
     await w.findAll('.page-header button').find((b) => b.text() === '开标')!.trigger('click');
     await flushPromises();
