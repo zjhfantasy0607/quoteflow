@@ -20,12 +20,15 @@ import { formatDateTime, pickName } from '@/utils/format';
 import { inquiryNo, remainingText } from '@/utils/inquiries';
 import ApprovalTimeline from './ApprovalTimeline.vue';
 import InquiryFilesSection from './InquiryFilesSection.vue';
+import InquiryInviteesTab from './InquiryInviteesTab.vue';
 import InquiryLinesTable from './InquiryLinesTable.vue';
 import InquiryLogs from './InquiryLogs.vue';
+import InquiryResponsesTab from './InquiryResponsesTab.vue';
+import PublishDialog from './PublishDialog.vue';
 
 /**
- * 询价单详情（M06 §5）：表头卡片 + 按 allowedActions 显示的操作 + 页签（明细与附件 / 审批记录 / 操作日志）；
- * 待审批时页面底部是"审批操作"区（参考 PPT #22）。M07 起增加"邀请供应商""供应商响应"等页签
+ * 询价单详情（M06 §5、M07 §5）：表头卡片 + 按 allowedActions 显示的操作 + 页签（明细与附件 / 邀请供应商 /
+ * 供应商响应（发布后） / 审批记录 / 操作日志）；待审批时页面底部是"审批操作"区（参考 PPT #22）
  */
 const { t, locale } = useI18n();
 const route = useRoute();
@@ -43,9 +46,14 @@ const tab = ref('lines');
 const comment = ref('');
 const acting = ref(false);
 const approvalPanel = ref<HTMLElement | null>(null);
+const publishVisible = ref(false);
+/** "邀请供应商"页签里有没保存的修改 */
+const inviteesDirty = ref(false);
 
 const can = (action: InquiryAction) => inquiry.value?.allowedActions.includes(action) ?? false;
 const canReview = computed(() => can('approve') || can('reject'));
+/** 当前轮次已发布（有供应商参与） */
+const published = computed(() => !!inquiry.value?.currentRound.publishedAt);
 const deadlineText = computed(() => {
   const deadline = inquiry.value?.currentDeadline;
   if (!deadline) return t('inquiries.detail.deadlineNotSet');
@@ -140,8 +148,24 @@ async function reject(): Promise<void> {
   }
 }
 
+function openPublish(): void {
+  if (inviteesDirty.value) {
+    ElMessage.warning(t('inquiries.publish.saveInviteesFirst'));
+    tab.value = 'invitees';
+    return;
+  }
+  publishVisible.value = true;
+}
+
+async function onPublished(updated: InquiryDetailDto): Promise<void> {
+  await afterAction(updated);
+  tab.value = 'responses';
+}
+
 async function cancel(): Promise<void> {
-  const reason = await promptText(t('inquiries.detail.cancelPrompt'), t('inquiries.detail.cancelTitle'), {
+  // R07-11：发布后取消，原因会写进发给供应商的取消通知
+  const prompt = published.value ? 'inquiries.detail.cancelPromptPublished' : 'inquiries.detail.cancelPrompt';
+  const reason = await promptText(t(prompt), t('inquiries.detail.cancelTitle'), {
     inputType: 'textarea',
     inputValidator: (v: string) => (v && v.trim().length > 0) || t('inquiries.detail.reasonRequired'),
     confirmButtonClass: 'el-button--danger',
@@ -174,6 +198,7 @@ watch(
     round.value = null;
     logs.value = [];
     tab.value = 'lines';
+    inviteesDirty.value = false;
     await load();
     // 从"待我审批"进来时直接滚到审批操作区
     if (route.query.from === 'approvals' && canReview.value) {
@@ -206,6 +231,9 @@ watch(
           </el-button>
           <el-button v-if="can('submit')" type="primary" icon="Promotion" :loading="acting" @click="submit">
             {{ t('inquiries.detail.actions.submit') }}
+          </el-button>
+          <el-button v-if="can('publish')" type="primary" icon="Promotion" @click="openPublish">
+            {{ t('inquiries.detail.actions.publish') }}
           </el-button>
           <el-button
             v-if="can('cancel')"
@@ -317,6 +345,16 @@ watch(
               </div>
             </template>
           </el-tab-pane>
+          <el-tab-pane name="invitees" :label="t('inquiries.detail.tabs.invitees')" lazy>
+            <InquiryInviteesTab
+              :inquiry="inquiry"
+              @changed="afterAction"
+              @dirty="(value: boolean) => (inviteesDirty = value)"
+            />
+          </el-tab-pane>
+          <el-tab-pane v-if="published" name="responses" :label="t('inquiries.detail.tabs.responses')" lazy>
+            <InquiryResponsesTab :inquiry="inquiry" @changed="afterAction" />
+          </el-tab-pane>
           <el-tab-pane name="approvals" :label="t('inquiries.detail.tabs.approvals')">
             <ApprovalTimeline :items="approvals" />
           </el-tab-pane>
@@ -349,6 +387,8 @@ watch(
           </div>
         </el-card>
       </div>
+
+      <PublishDialog v-model="publishVisible" :inquiry="inquiry" @published="onPublished" />
     </template>
   </div>
 </template>

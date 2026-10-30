@@ -40,6 +40,12 @@ const enums: LocaleMessages['enums'] = {
     VOID: 'Void',
   },
   QuoteVersionSource: { ONLINE: 'Online', EXCEL: 'Excel import', NEGOTIATION: 'Negotiated' },
+  PortalAccountState: {
+    ACTIVE: 'Active',
+    PENDING: 'Pending activation',
+    DISABLED: 'Disabled',
+    NONE: 'Not set up',
+  },
   NegotiationStatus: { OPEN: 'In negotiation', AGREED: 'Agreed', CLOSED: 'Closed' },
   NegotiationParty: { BUYER: 'Buyer', SUPPLIER: 'Supplier' },
   NegotiationMsgType: {

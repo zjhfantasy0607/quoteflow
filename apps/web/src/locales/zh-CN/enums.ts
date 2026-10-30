@@ -33,6 +33,7 @@ export default {
     VOID: '已作废',
   },
   QuoteVersionSource: { ONLINE: '在线填写', EXCEL: 'Excel 导入', NEGOTIATION: '议价成交' },
+  PortalAccountState: { ACTIVE: '已开通', PENDING: '待激活', DISABLED: '已停用', NONE: '未开通' },
   NegotiationStatus: { OPEN: '议价中', AGREED: '已成交', CLOSED: '已关闭' },
   NegotiationParty: { BUYER: '采购方', SUPPLIER: '供应商' },
   NegotiationMsgType: { OFFER: '目标价', COUNTER: '反提案', ACCEPT: '接受', REJECT: '拒绝', CLOSE: '关闭议价' },

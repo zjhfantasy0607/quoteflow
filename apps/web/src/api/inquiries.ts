@@ -8,12 +8,16 @@ import type {
   InquiryApprovalDto,
   InquiryDetailDto,
   InquiryFileDto,
+  InquiryInviteeDto,
   InquiryLineDto,
   InquiryListItemDto,
   InquiryListParams,
   InquiryRoundDto,
   InquiryUserOptionDto,
+  InviteeCandidateDto,
+  InviteeCandidatesParams,
   Paginated,
+  QuoteResponseDto,
   UpdateInquiryInput,
   UpdateLineParams,
 } from '@quoteflow/shared';
@@ -68,4 +72,23 @@ export const inquiriesApi = {
     del<{ ok: true }>(`${roundPath(id, roundNo)}/files/${inquiryFileId}`),
   copyFiles: (id: string, roundNo: number, body: CopyLineFilesInput) =>
     post<InquiryRoundDto>(`${roundPath(id, roundNo)}/files/copy`, body, { silent: true }),
+
+  /** 受邀名单（M07） */
+  invitees: (id: string) => get<InquiryInviteeDto[]>(`/inquiries/${id}/invitees`),
+  /** 候选供应商（需要 inquiry:invite） */
+  candidates: (id: string, query: Partial<InviteeCandidatesParams>) =>
+    get<Paginated<InviteeCandidateDto>>(`/inquiries/${id}/invitee-candidates`, query),
+  saveInvitees: (id: string, supplierIds: string[]) =>
+    put<InquiryInviteeDto[]>(`/inquiries/${id}/invitees`, { supplierIds }),
+  /** deadline 是 ISO 字符串（UTC） */
+  publish: (id: string, roundNo: number, deadline: string) =>
+    post<InquiryDetailDto>(`${roundPath(id, roundNo)}/publish`, { deadline }),
+  lateInvite: (id: string, roundNo: number, supplierIds: string[]) =>
+    post<InquiryDetailDto>(`${roundPath(id, roundNo)}/late-invite`, { supplierIds }),
+  remind: (id: string, roundNo: number, quoteIds: string[]) =>
+    post<InquiryDetailDto>(`${roundPath(id, roundNo)}/remind`, { quoteIds }),
+  extendDeadline: (id: string, roundNo: number, deadline: string) =>
+    put<InquiryDetailDto>(`${roundPath(id, roundNo)}/deadline`, { deadline }),
+  /** 供应商响应（开标前只有状态字段） */
+  responses: (id: string, roundNo: number) => get<QuoteResponseDto[]>(`${roundPath(id, roundNo)}/responses`),
 };
