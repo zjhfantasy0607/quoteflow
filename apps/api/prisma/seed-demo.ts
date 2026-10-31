@@ -5,7 +5,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { demoContext, seedD1, seedD2, seedD3 } from './demo/scenarios';
+import { demoContext, seedD1, seedD2, seedD3, seedD4 } from './demo/scenarios';
 
 async function main(): Promise<void> {
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn'] });
@@ -20,7 +20,10 @@ async function main(): Promise<void> {
     const d1 = await seedD1(ctx);
     const d2 = await seedD2(ctx);
     const d3 = await seedD3(ctx);
-    console.log(`seed-demo: D1 draft ${d1}, D2 pending approval ${d2}, D3 awaiting quotes ${d3}`);
+    const d4 = await seedD4(ctx);
+    console.log(
+      `seed-demo: D1 draft ${d1}, D2 pending approval ${d2}, D3 awaiting quotes ${d3}, D4 negotiating ${d4}`,
+    );
   } finally {
     await app.close();
   }

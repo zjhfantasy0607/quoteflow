@@ -1,5 +1,5 @@
 // 演示场景（docs/06-种子数据.md §3）。单据一律通过 service 方法创建，状态和不变量与真实操作一致。
-// 哪个模块完成就在这里补哪个场景：M06 → D1、D2；M09 → D3。
+// 哪个模块完成就在这里补哪个场景：M06 → D1、D2；M09 → D3；M11 → D4。
 import type { INestApplicationContext } from '@nestjs/common';
 import {
   approveInquirySchema,
@@ -7,6 +7,8 @@ import {
   createInquirySchema,
   createLineSchema,
   linesFromMaterialsSchema,
+  negotiationOfferSchema,
+  negotiationRespondSchema,
   publishRoundSchema,
   quoteFormSchema,
   updateInviteesSchema,
@@ -22,9 +24,12 @@ import { InquiryFilesService } from '../../src/modules/inquiries/inquiry-files.s
 import { InquiryInviteesService } from '../../src/modules/inquiries/inquiry-invitees.service';
 import { InquiryLinesService } from '../../src/modules/inquiries/inquiry-lines.service';
 import { InquiryWorkflowService } from '../../src/modules/inquiries/inquiry-workflow.service';
+import { RoundDeadlineJob } from '../../src/modules/inquiries/round-deadline.job';
 import { RoundWorkflowService } from '../../src/modules/inquiries/round-workflow.service';
+import { NegotiationsService } from '../../src/modules/negotiations/negotiations.service';
 import { PortalQuotesService } from '../../src/modules/portal/portal-quotes.service';
 import { QuoteSubmissionService } from '../../src/modules/portal/quote-submission.service';
+import { RoundShortlistService } from '../../src/modules/quotes/round-shortlist.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { demoPdf, demoPng } from './demo-files';
 
@@ -374,6 +379,195 @@ export async function seedD3(ctx: DemoContext): Promise<string> {
       form(['0.42', '1.78'], {
         remark: '含税含运费，送货到深圳宝安。',
         changeNote: '原材料价格回落，两款统一下调单价。',
+      }),
+    ),
+  );
+  return inquiry.formalNo!;
+}
+
+/** D4 两行散热器报价（PPL-PERIPH 的必填列：含税单价、税率、交期、材质） */
+function d4Values(prices: [string, string], leadTimeDays: number, brand: string): Record<string, unknown>[] {
+  const common = {
+    brand,
+    material: '压铸铝 ADC12',
+    tax_rate: '13',
+    lead_time_days: leadTimeDays,
+    moq: 3000,
+    price_valid_until: '2027-06-30',
+    payment_terms: 'NET60',
+    sample_lead_days: 10,
+    warranty_months: 36,
+    rohs: true,
+    packing_method: 'CARTON',
+    trade_term: 'DAP',
+  };
+  return [
+    { ...common, model: 'HS-80-45', unit_price_incl_tax: prices[0], pcs_per_carton: 100 },
+    { ...common, model: 'HS-100-60', unit_price_incl_tax: prices[1], pcs_per_carton: 60 },
+  ];
+}
+
+/**
+ * D4：PJ-2026-003 / 散热器询价，开标·议价中。六天前建单审批、五天前发布给 SUP10003、SUP10004、SUP10006，
+ * 三家都报了价（SUP10003 提交了 2 版，第 2 版降价），两天前截止、一天多前开标；入围 SUP10003、SUP10004；
+ * 与 SUP10003 议价：采购方发目标价（加量、改表面处理）→ 供应商反提案，等采购方处理
+ */
+export async function seedD4(ctx: DemoContext): Promise<string> {
+  const { pd, buyer, manager } = ctx.users;
+  const deadline = inAppTz(new Date())
+    .subtract(2, 'day')
+    .hour(18)
+    .minute(0)
+    .second(0)
+    .millisecond(0)
+    .toDate();
+  const inquiry = await atOffset(ctx, -6 * DAY_MS, async () => {
+    const created = await ctx.app.get(InquiriesService).create(
+      buyer,
+      createInquirySchema.parse({
+        projectNo: 'PJ-2026-003',
+        title: '散热器询价',
+        materialCategoryId: ctx.category['PER-HS'],
+        currency: 'CNY',
+        description: '筒灯与工矿灯配套散热器，表面阳极氧化，需提供盐雾测试报告。',
+        ownerId: buyer.id,
+        pdUserId: pd.id,
+      }),
+    );
+    const lines = ctx.app.get(InquiryLinesService);
+    await lines.createFromMaterials(
+      buyer,
+      created.id,
+      1,
+      linesFromMaterialsSchema.parse({
+        items: [{ materialId: ctx.material['MAT-000007'], quantity: '10000' }],
+      }),
+    );
+    await lines.create(
+      buyer,
+      created.id,
+      1,
+      createLineSchema.parse({
+        source: 'MANUAL',
+        nameZh: '压铸铝散热器（大）',
+        nameEn: 'Die-cast Heat Sink (Large)',
+        spec: 'Φ100 × 60mm / ADC12 / 银色阳极氧化',
+        unitCode: 'PCS',
+        categoryId: ctx.category['PER-HS'],
+        quantity: '5000',
+      }),
+    );
+    const workflow = ctx.app.get(InquiryWorkflowService);
+    await workflow.submit(buyer, created.id);
+    return workflow.approve(manager, created.id, approveInquirySchema.parse({}));
+  });
+
+  const suppliers = await ctx.prisma.supplier.findMany({
+    where: { code: { in: ['SUP10003', 'SUP10004', 'SUP10006'] } },
+    select: { id: true },
+  });
+  await atOffset(ctx, -5 * DAY_MS, async () => {
+    await ctx.app
+      .get(InquiryInviteesService)
+      .replace(buyer, inquiry.id, updateInviteesSchema.parse({ supplierIds: suppliers.map((s) => s.id) }));
+    await ctx.app
+      .get(RoundWorkflowService)
+      .publish(buyer, inquiry.id, 1, publishRoundSchema.parse({ deadline: deadline.toISOString() }));
+  });
+
+  const quotes = await ctx.prisma.quote.findMany({
+    where: { round: { inquiryId: inquiry.id } },
+    select: { id: true, supplier: { select: { code: true } } },
+  });
+  const quoteOf = (code: string) => quotes.find((q) => q.supplier.code === code)!.id;
+  const lines = await ctx.prisma.inquiryLine.findMany({
+    where: { round: { inquiryId: inquiry.id } },
+    orderBy: { lineNo: 'asc' },
+    select: { id: true },
+  });
+  const submission = ctx.app.get(QuoteSubmissionService);
+  const form = (values: Record<string, unknown>[], extra: Record<string, string> = {}) =>
+    quoteFormSchema.parse({ lines: { [lines[0].id]: values[0], [lines[1].id]: values[1] }, ...extra });
+
+  const xinneng = await supplierActor(ctx, 'SUP10003');
+  const jinggong = await supplierActor(ctx, 'SUP10004');
+  const brightSource = await supplierActor(ctx, 'SUP10006');
+  await atOffset(ctx, -4 * DAY_MS, () =>
+    submission.submit(
+      xinneng,
+      quoteOf('SUP10003'),
+      form(d4Values(['6.80', '9.50'], 25, '新能'), {
+        remark: '含税含运费，送货到深圳宝安。',
+        changeNote: '首次报价',
+      }),
+    ),
+  );
+  await atOffset(ctx, -4 * DAY_MS + 3 * HOUR_MS, () =>
+    submission.submit(jinggong, quoteOf('SUP10004'), form(d4Values(['6.30', '9.80'], 35, '精工'))),
+  );
+  await atOffset(ctx, -3 * DAY_MS, () =>
+    submission.submit(
+      brightSource,
+      quoteOf('SUP10006'),
+      form(d4Values(['7.20', '9.00'], 40, 'Bright Source'), { remark: 'Price incl. VAT, DAP Shenzhen.' }),
+    ),
+  );
+  await atOffset(ctx, -3 * DAY_MS + 5 * HOUR_MS, () =>
+    submission.submit(
+      xinneng,
+      quoteOf('SUP10003'),
+      form(d4Values(['6.50', '9.20'], 25, '新能'), {
+        remark: '含税含运费，送货到深圳宝安。',
+        changeNote: '铝锭价格回落，两款统一下调单价。',
+      }),
+    ),
+  );
+
+  // 截止任务关闭（截止在两天前 18:00），一天多前开标、入围
+  await atOffset(ctx, deadline.getTime() - Date.now() + 60_000, () => ctx.app.get(RoundDeadlineJob).run());
+  await atOffset(ctx, -DAY_MS - 4 * HOUR_MS, () =>
+    ctx.app.get(RoundWorkflowService).open(manager, inquiry.id, 1),
+  );
+  await atOffset(ctx, -DAY_MS - 3 * HOUR_MS, () =>
+    ctx.app.get(RoundShortlistService).save(buyer, inquiry.id, 1, [quoteOf('SUP10003'), quoteOf('SUP10004')]),
+  );
+
+  const negotiations = ctx.app.get(NegotiationsService);
+  const offered = await atOffset(ctx, -20 * HOUR_MS, () =>
+    negotiations.offer(
+      buyer,
+      quoteOf('SUP10003'),
+      negotiationOfferSchema.parse({
+        lines: [
+          {
+            lineId: lines[0].id,
+            unitPriceInclTax: '6.00',
+            quantity: '12000',
+            specNote: '表面处理改为黑色阳极氧化',
+          },
+          { lineId: lines[1].id, unitPriceInclTax: '8.80' },
+        ],
+        content: '两款合计订货 17000 件，目标价如下，希望本周内确认。',
+      }),
+    ),
+  );
+  await atOffset(ctx, -6 * HOUR_MS, () =>
+    negotiations.respond(
+      xinneng,
+      quoteOf('SUP10003'),
+      negotiationRespondSchema.parse({
+        type: 'COUNTER',
+        replyToId: offered.messages.at(-1)!.id,
+        lines: [
+          {
+            lineId: lines[0].id,
+            unitPriceInclTax: '6.20',
+            quantity: '12000',
+            specNote: '黑色阳极氧化，费用已含在单价内',
+          },
+          { lineId: lines[1].id, unitPriceInclTax: '9.00' },
+        ],
+        content: '铝价仍在高位，最低可做到如下价格；第 1 款数量 12000 件可以接受。',
       }),
     ),
   );
