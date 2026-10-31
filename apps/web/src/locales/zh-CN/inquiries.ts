@@ -159,6 +159,7 @@ export default {
     completedMeta: '{name} 于 {time} 定标，询价单已完成，只能查看',
     awardComment: '定标说明：{comment}',
     contractDraft: '已自动生成合同草稿 {contractNo}',
+    viewContract: '查看合同',
     rejectedBanner: '上次审批被驳回，意见：{comment}',
     pendingBanner: '已提交审批，等待审批人处理',
     approvalPanel: '审批操作',

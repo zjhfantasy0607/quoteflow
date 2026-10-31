@@ -70,6 +70,24 @@ export const buyerRoute: RouteRecordRaw = {
       meta: { titleKey: 'nav.inquiryQuote', userType: 'INTERNAL', perm: 'inquiry:evaluate' },
     },
     {
+      path: 'contracts',
+      name: 'contracts',
+      component: () => import('@/views/contracts/ContractsPage.vue'),
+      meta: {
+        titleKey: 'nav.contracts',
+        userType: 'INTERNAL',
+        perm: 'contract:view',
+        menu: { icon: 'DocumentChecked', order: 200, groupKey: 'nav.contractsGroup', groupIcon: 'Notebook' },
+      },
+    },
+    {
+      // 页面按 allowedActions 显示编辑、提交审核、审核、批准、上传签字扫描件（M14）
+      path: 'contracts/:id',
+      name: 'contract-detail',
+      component: () => import('@/views/contracts/ContractDetailPage.vue'),
+      meta: { titleKey: 'nav.contractDetail', userType: 'INTERNAL', perm: 'contract:view' },
+    },
+    {
       path: 'suppliers',
       name: 'suppliers',
       component: () => import('@/views/suppliers/SuppliersPage.vue'),
@@ -245,6 +263,13 @@ export const portalRoute: RouteRecordRaw = {
 export const routes: RouteRecordRaw[] = [
   buyerRoute,
   portalRoute,
+  {
+    // 合同打印版（M14 R14-8）：不带菜单和顶栏，A4 排版，只用快照渲染
+    path: '/contracts/:id/print',
+    name: 'contract-print',
+    component: () => import('@/views/contracts/ContractPrintPage.vue'),
+    meta: { titleKey: 'nav.contractPrint', userType: 'INTERNAL', perm: 'contract:view' },
+  },
   {
     path: '/login',
     component: BlankLayout,

@@ -132,7 +132,12 @@ async function mountPage(detail: InquiryDetailDto): Promise<VueWrapper> {
       { path: '/inquiries/:id/edit', name: 'inquiry-edit', component: { template: '<div />' } },
       { path: '/inquiries', name: 'inquiries', component: { template: '<div />' } },
       { path: '/inquiries/approvals', name: 'inquiry-approvals', component: { template: '<div />' } },
-      { path: '/inquiries/:id/rounds/:roundNo/change', name: 'inquiry-change', component: { template: '<div />' } },
+      {
+        path: '/inquiries/:id/rounds/:roundNo/change',
+        name: 'inquiry-change',
+        component: { template: '<div />' },
+      },
+      { path: '/contracts/:id', name: 'contract-detail', component: { template: '<div />' } },
     ],
   });
   await router.push('/inquiries/q1');
@@ -254,6 +259,13 @@ describe('InquiryDetailPage', () => {
     expect(banner.text()).toContain('张伟 于 2026-11-06 10:00 北京时间 定标');
     expect(banner.text()).toContain('定标说明：议价后综合价格最低');
     expect(banner.text()).toContain('已自动生成合同草稿 CT-202611-0001');
+    expect(banner.find('.contract-link').exists()).toBe(false);
+    // M14：有 contract:view 时合同号后面是"查看合同"链接
+    useAuthStore().me!.permissions.push('contract:view');
+    await flushPromises();
+    const link = w.find('.completed-banner .contract-link');
+    expect(link.text()).toBe('查看合同');
+    expect(link.attributes('href')).toBe('/contracts/ct1');
     expect(w.find('.round-progress').text()).toContain('2026-11-06 10:00');
     expect(buttonTexts(w)).toEqual(['返回']);
     w.unmount();
@@ -308,7 +320,10 @@ describe('InquiryDetailPage', () => {
     expect(w.text()).toContain('2026-11-05 10:00 北京时间（已提前截止）');
     expect(w.text()).not.toContain('剩余');
     expect(buttonTexts(w)).toContain('开标');
-    await w.findAll('.page-header button').find((b) => b.text() === '开标')!.trigger('click');
+    await w
+      .findAll('.page-header button')
+      .find((b) => b.text() === '开标')!
+      .trigger('click');
     await flushPromises();
     expect(mocks.confirm).toHaveBeenCalled();
     expect(mocks.open).toHaveBeenCalledWith('q1', 1);
@@ -359,11 +374,7 @@ describe('InquiryDetailPage', () => {
       }) as unknown as InquiryDetailDto;
 
     it('R13-8 轮次页签条：切到作废的第 1 轮只读查看，变更草稿进入编辑页；有变更草稿时顶部提示', async () => {
-      mocks.rounds.mockResolvedValue([
-        brief(1, 'SUPERSEDED'),
-        brief(2, 'WAITING_QUOTES'),
-        brief(3, 'DRAFT'),
-      ]);
+      mocks.rounds.mockResolvedValue([brief(1, 'SUPERSEDED'), brief(2, 'WAITING_QUOTES'), brief(3, 'DRAFT')]);
       // 按轮次号返回（mock 的签名是无参的，这里断言成 never）
       mocks.round.mockImplementation((async (_id: string, no: number) => ({
         ...brief(no, no === 1 ? 'SUPERSEDED' : 'WAITING_QUOTES'),
@@ -384,7 +395,8 @@ describe('InquiryDetailPage', () => {
       });
       const w = await mountPage(waiting());
       expect(w.find('.draft-banner').text()).toContain('有未发布的规格变更（第 3 轮）');
-      const labels = () => w.findAll('.round-strip .el-radio-button').map((b) => b.text().replace(/\s+/g, ''));
+      const labels = () =>
+        w.findAll('.round-strip .el-radio-button').map((b) => b.text().replace(/\s+/g, ''));
       expect(labels()).toEqual(['第1轮（已作废）只读', '第2轮（等待报价）', '第3轮（变更草稿）']);
       // 当前第 2 轮：变更说明与规格对比
       expect(w.text()).toContain('第 2 轮变更说明');
@@ -419,7 +431,10 @@ describe('InquiryDetailPage', () => {
       );
       expect(w.find('.round-strip').exists()).toBe(false);
       expect(buttonTexts(w)).toContain('发起规格变更');
-      await w.findAll('.page-header button').find((b) => b.text() === '发起规格变更')!.trigger('click');
+      await w
+        .findAll('.page-header button')
+        .find((b) => b.text() === '发起规格变更')!
+        .trigger('click');
       await flushPromises();
       expect(mocks.confirm).toHaveBeenCalledWith(expect.stringContaining('生成第 2 轮变更草稿'), {
         type: 'info',

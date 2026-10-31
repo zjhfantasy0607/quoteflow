@@ -6,17 +6,25 @@ import { useI18n } from 'vue-i18n';
 import { filesApi } from '@/api/files';
 import { apiError, translateError } from '@/api/http';
 import { paramsApi } from '@/api/system';
-import { acceptAttr, allowedExtsText, checkUpload, formatFileSize, maxUploadMB } from '@/utils/files';
+import {
+  acceptAttr,
+  allowedExtsText,
+  checkUpload,
+  fileExtension,
+  formatFileSize,
+  maxUploadMB,
+} from '@/utils/files';
 import FilePreview from './FilePreview.vue';
 
 /**
  * 先上传到 /api/files 拿到 FileDto，再由业务表单把 fileId 提交给业务接口（01 §5.4）。
  * 按 kind 预检类型和大小（R02-4），数量上限由 limit 控制；点文件名可预览。
+ * exts 在 kind 允许的扩展名里再收窄（如合同签字扫描件只收 PDF 和图片）
  */
-const props = withDefaults(defineProps<{ kind: UploadKind; limit?: number; disabled?: boolean }>(), {
-  limit: 10,
-  disabled: false,
-});
+const props = withDefaults(
+  defineProps<{ kind: UploadKind; limit?: number; disabled?: boolean; exts?: readonly string[] }>(),
+  { limit: 10, disabled: false, exts: undefined },
+);
 const files = defineModel<FileDto[]>({ default: () => [] });
 
 const { t } = useI18n();
@@ -24,12 +32,15 @@ const limits = ref<AppConfigDto['uploadLimits'] | null>(null);
 const uploading = ref(0);
 const previewing = ref<FileDto | null>(null);
 
-const accept = computed(() => acceptAttr(props.kind));
+const accept = computed(() =>
+  props.exts ? props.exts.map((e) => `.${e}`).join(',') : acceptAttr(props.kind),
+);
+const extsText = computed(() => props.exts?.join(', ') ?? allowedExtsText(props.kind));
 const full = computed(() => files.value.length + uploading.value >= props.limit);
 const tip = computed(() => {
   const base = limits.value
-    ? t('file.upload.tip', { exts: allowedExtsText(props.kind), maxMB: maxUploadMB(props.kind, limits.value) })
-    : allowedExtsText(props.kind);
+    ? t('file.upload.tip', { exts: extsText.value, maxMB: maxUploadMB(props.kind, limits.value) })
+    : extsText.value;
   return props.limit > 1 ? base + t('file.upload.tipLimit', { limit: props.limit }) : base;
 });
 
@@ -38,13 +49,18 @@ function beforeUpload(raw: UploadRawFile): boolean {
     ElMessage.warning(t('file.upload.tooMany', { limit: props.limit }));
     return false;
   }
-  const problem = checkUpload(props.kind, raw, limits.value);
+  const problem =
+    props.exts && !props.exts.includes(fileExtension(raw.name))
+      ? 'type'
+      : checkUpload(props.kind, raw, limits.value);
   if (problem === 'type') {
-    ElMessage.error(t('file.upload.typeNotAllowed', { name: raw.name, exts: allowedExtsText(props.kind) }));
+    ElMessage.error(t('file.upload.typeNotAllowed', { name: raw.name, exts: extsText.value }));
     return false;
   }
   if (problem === 'size') {
-    ElMessage.error(t('file.upload.tooLarge', { name: raw.name, maxMB: maxUploadMB(props.kind, limits.value!) }));
+    ElMessage.error(
+      t('file.upload.tooLarge', { name: raw.name, maxMB: maxUploadMB(props.kind, limits.value!) }),
+    );
     return false;
   }
   return true;
@@ -56,7 +72,9 @@ async function doUpload(options: UploadRequestOptions): Promise<void> {
     const dto = await filesApi.upload(options.file, props.kind);
     files.value = [...files.value, dto];
   } catch (err) {
-    ElMessage.error(t('file.upload.failed', { name: options.file.name, reason: translateError(apiError(err)) }));
+    ElMessage.error(
+      t('file.upload.failed', { name: options.file.name, reason: translateError(apiError(err)) }),
+    );
   } finally {
     uploading.value -= 1;
   }
@@ -81,7 +99,9 @@ onMounted(async () => {
       :before-upload="beforeUpload"
       :http-request="doUpload"
     >
-      <el-button icon="Upload" :loading="uploading > 0" :disabled="full">{{ t('file.upload.button') }}</el-button>
+      <el-button icon="Upload" :loading="uploading > 0" :disabled="full">{{
+        t('file.upload.button')
+      }}</el-button>
     </el-upload>
     <div v-if="!disabled" class="tip">{{ tip }}</div>
     <ul v-if="files.length > 0" class="list">
@@ -89,7 +109,9 @@ onMounted(async () => {
         <el-icon><Document /></el-icon>
         <el-button link type="primary" class="name" @click="previewing = f">{{ f.originalName }}</el-button>
         <span class="size">{{ formatFileSize(f.size) }}</span>
-        <el-button v-if="!disabled" link type="danger" @click="remove(f)">{{ t('file.upload.remove') }}</el-button>
+        <el-button v-if="!disabled" link type="danger" @click="remove(f)">{{
+          t('file.upload.remove')
+        }}</el-button>
       </li>
     </ul>
 

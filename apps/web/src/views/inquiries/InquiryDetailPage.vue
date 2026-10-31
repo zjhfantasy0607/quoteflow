@@ -430,6 +430,13 @@ watch(
         </div>
         <div v-if="inquiry.award.contract">
           {{ t('inquiries.detail.contractDraft', { contractNo: inquiry.award.contract.contractNo }) }}
+          <router-link
+            v-if="auth.hasPerm('contract:view')"
+            :to="{ name: 'contract-detail', params: { id: inquiry.award.contract.id } }"
+            class="link contract-link"
+          >
+            {{ t('inquiries.detail.viewContract') }}
+          </router-link>
         </div>
       </el-alert>
       <el-alert
@@ -667,6 +674,9 @@ watch(
 }
 .link {
   color: var(--el-color-primary);
+}
+.contract-link {
+  margin-left: 8px;
 }
 .round-strip {
   margin-bottom: 12px;

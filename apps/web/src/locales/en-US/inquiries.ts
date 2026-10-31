@@ -163,6 +163,7 @@ const inquiries: LocaleMessages['inquiries'] = {
     completedMeta: 'Awarded by {name} at {time}. The RFQ is completed and read-only.',
     awardComment: 'Award note: {comment}',
     contractDraft: 'Contract draft {contractNo} has been created automatically',
+    viewContract: 'View contract',
     cancelledBanner: 'Cancelled at {time}. Reason: {reason}',
     rejectedBanner: 'The last approval was rejected. Comment: {comment}',
     pendingBanner: 'Submitted for approval and waiting for the approver',
