@@ -13,6 +13,7 @@ export default {
   inquiryEdit: '编辑询价单',
   inquiryDetail: '询价单详情',
   inquiryQuote: '报价详情',
+  inquiryChange: '规格变更',
   suppliersGroup: '供应商管理',
   suppliers: '供应商列表',
   supplierCategories: '供应商分类',

@@ -4,7 +4,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import ElementPlus from 'element-plus';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMemoryHistory, createRouter } from 'vue-router';
+import { createMemoryHistory, createRouter, type Router } from 'vue-router';
 import { applyLocale, i18n } from '@/i18n';
 import { useAuthStore } from '@/stores/auth';
 import InquiryDetailPage from './InquiryDetailPage.vue';
@@ -71,6 +71,9 @@ const mocks = vi.hoisted(() => {
     approve: vi.fn(),
     open: vi.fn(),
     responses: vi.fn(async () => ({ sealed: false, items: [] })),
+    rounds: vi.fn(async () => [] as unknown[]),
+    roundDiff: vi.fn(),
+    createChangeRound: vi.fn(),
     confirm: vi.fn(async () => true),
   };
 });
@@ -85,6 +88,9 @@ vi.mock('@/api/inquiries', () => ({
     approve: mocks.approve,
     open: mocks.open,
     responses: mocks.responses,
+    rounds: mocks.rounds,
+    roundDiff: mocks.roundDiff,
+    createChangeRound: mocks.createChangeRound,
   },
 }));
 vi.mock('@/api/system', () => ({
@@ -112,18 +118,21 @@ function me(): MeDto {
   };
 }
 
+let router: Router;
+
 async function mountPage(detail: InquiryDetailDto): Promise<VueWrapper> {
   mocks.get.mockResolvedValue(detail);
   const pinia = createPinia();
   setActivePinia(pinia);
   useAuthStore().me = me();
-  const router = createRouter({
+  router = createRouter({
     history: createMemoryHistory(),
     routes: [
       { path: '/inquiries/:id', name: 'inquiry-detail', component: InquiryDetailPage },
       { path: '/inquiries/:id/edit', name: 'inquiry-edit', component: { template: '<div />' } },
       { path: '/inquiries', name: 'inquiries', component: { template: '<div />' } },
       { path: '/inquiries/approvals', name: 'inquiry-approvals', component: { template: '<div />' } },
+      { path: '/inquiries/:id/rounds/:roundNo/change', name: 'inquiry-change', component: { template: '<div />' } },
     ],
   });
   await router.push('/inquiries/q1');
@@ -307,5 +316,117 @@ describe('InquiryDetailPage', () => {
     expect(mocks.responses).toHaveBeenCalledWith('q1', 1);
     expect(w.find('.round-progress').text()).toContain('2026-11-05 11:00 北京时间');
     w.unmount();
+  });
+
+  describe('M13 规格变更', () => {
+    const brief = (roundNo: number, status: string, extra: Record<string, unknown> = {}) => ({
+      id: `r${roundNo}`,
+      roundNo,
+      status,
+      deadline: null,
+      publishedAt: status === 'DRAFT' ? null : '2026-11-02T01:00:00.000Z',
+      openedAt: null,
+      evaluatedAt: null,
+      changeReason: roundNo > 1 ? '显色指数 Ra80 → Ra90' : null,
+      changeSummary: roundNo > 1 ? '两款都改为 Ra90' : null,
+      lineCount: 1,
+      quoteCount: 2,
+      shortlistCount: 0,
+      createdAt: '2026-11-02T01:00:00.000Z',
+      ...extra,
+    });
+    const waiting = () =>
+      mocks.detail({
+        docStatus: 'APPROVED',
+        displayStatus: 'WAITING_QUOTES',
+        formalNo: 'RFQ-202611-0001',
+        currentRoundNo: 2,
+        currentRoundStatus: 'WAITING_QUOTES',
+        currentRound: {
+          id: 'r2',
+          roundNo: 2,
+          status: 'WAITING_QUOTES',
+          deadline: '2026-11-09T10:00:00.000Z',
+          publishedAt: '2026-11-04T01:00:00.000Z',
+          quotesClosedAt: null,
+          closedEarly: false,
+          openedAt: null,
+          evaluatedAt: null,
+          lineCount: 1,
+          shortlistCount: 0,
+        },
+        draftRoundNo: 3,
+      }) as unknown as InquiryDetailDto;
+
+    it('R13-8 轮次页签条：切到作废的第 1 轮只读查看，变更草稿进入编辑页；有变更草稿时顶部提示', async () => {
+      mocks.rounds.mockResolvedValue([
+        brief(1, 'SUPERSEDED'),
+        brief(2, 'WAITING_QUOTES'),
+        brief(3, 'DRAFT'),
+      ]);
+      // 按轮次号返回（mock 的签名是无参的，这里断言成 never）
+      mocks.round.mockImplementation((async (_id: string, no: number) => ({
+        ...brief(no, no === 1 ? 'SUPERSEDED' : 'WAITING_QUOTES'),
+        pplTemplateVersion: 1,
+        pplVariantCode: 'PPL-LED',
+        lines: [],
+        files: [],
+        allowedActions: [],
+      })) as never);
+      mocks.roundDiff.mockResolvedValue({
+        roundNo: 2,
+        previousRoundNo: 1,
+        changeReason: '显色指数 Ra80 → Ra90',
+        changeSummary: '两款都改为 Ra90',
+        lines: [],
+        files: { added: [], removed: [] },
+        summary: { ADDED: 0, REMOVED: 0, MODIFIED: 1, UNCHANGED: 0 },
+      });
+      const w = await mountPage(waiting());
+      expect(w.find('.draft-banner').text()).toContain('有未发布的规格变更（第 3 轮）');
+      const labels = () => w.findAll('.round-strip .el-radio-button').map((b) => b.text().replace(/\s+/g, ''));
+      expect(labels()).toEqual(['第1轮（已作废）只读', '第2轮（等待报价）', '第3轮（变更草稿）']);
+      // 当前第 2 轮：变更说明与规格对比
+      expect(w.text()).toContain('第 2 轮变更说明');
+      expect(w.text()).toContain('两款都改为 Ra90');
+      expect(mocks.roundDiff).toHaveBeenCalledWith('q1', 2);
+
+      await w.findAll('.round-strip input')[0].setValue(true);
+      await flushPromises();
+      expect(mocks.round).toHaveBeenLastCalledWith('q1', 1);
+      expect(w.text()).toContain('第 1 轮已作废，只能查看（询价已进入第 2 轮）');
+      expect(w.text()).not.toContain('第 2 轮变更说明');
+
+      await w.findAll('.round-strip input')[2].setValue(true);
+      await flushPromises();
+      expect(router.currentRoute.value).toMatchObject({
+        name: 'inquiry-change',
+        params: { id: 'q1', roundNo: '3' },
+      });
+      w.unmount();
+    });
+
+    it('R13-1 "发起规格变更"：确认后建第 N 轮变更草稿并进入编辑页', async () => {
+      mocks.rounds.mockResolvedValue([brief(1, 'WAITING_QUOTES')]);
+      mocks.createChangeRound.mockResolvedValue({ roundNo: 2 });
+      const w = await mountPage(
+        mocks.detail({
+          docStatus: 'APPROVED',
+          displayStatus: 'WAITING_QUOTES',
+          currentRoundStatus: 'WAITING_QUOTES',
+          allowedActions: ['createChangeRound'],
+        }) as unknown as InquiryDetailDto,
+      );
+      expect(w.find('.round-strip').exists()).toBe(false);
+      expect(buttonTexts(w)).toContain('发起规格变更');
+      await w.findAll('.page-header button').find((b) => b.text() === '发起规格变更')!.trigger('click');
+      await flushPromises();
+      expect(mocks.confirm).toHaveBeenCalledWith(expect.stringContaining('生成第 2 轮变更草稿'), {
+        type: 'info',
+      });
+      expect(mocks.createChangeRound).toHaveBeenCalledWith('q1', {});
+      expect(router.currentRoute.value).toMatchObject({ name: 'inquiry-change', params: { roundNo: '2' } });
+      w.unmount();
+    });
   });
 });

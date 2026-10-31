@@ -1,0 +1,28 @@
+// Specification comparison (M13): shared by the change editor, round view of the RFQ detail and the portal quotation detail
+export default {
+  title: 'Specification comparison (round {from} → round {to})',
+  summary: '{added} added · {removed} removed · {modified} changed · {unchanged} unchanged',
+  showUnchanged: 'Show unchanged lines',
+  noChanges: 'The RFQ lines and attachments are the same as in the previous round',
+  wholeFiles: 'RFQ attachments',
+  change: { ADDED: 'Added', REMOVED: 'Removed', MODIFIED: 'Changed', UNCHANGED: 'Unchanged' },
+  fields: {
+    nameZh: 'Material name',
+    nameEn: 'English name',
+    spec: 'Specification',
+    unitCode: 'Unit',
+    quantity: 'Quantity',
+    category: 'Material category',
+    brand: 'Brand',
+    drawingRef: 'Drawing / spec No.',
+    remark: 'Remark',
+  },
+  columns: { line: 'Line', item: 'Item', change: 'Change', detail: 'Details' },
+  lineNo: 'Line {no}',
+  lineMove: 'Line {from} → line {to}',
+  fieldChange: '{field}: {before} → {after}',
+  lineSummary: '{spec} · Qty {quantity} {unit}',
+  fileAdded: 'Attachment added: {name}',
+  fileRemoved: 'Attachment removed: {name}',
+  empty: '(empty)',
+};

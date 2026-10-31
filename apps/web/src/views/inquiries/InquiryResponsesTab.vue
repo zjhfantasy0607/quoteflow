@@ -15,9 +15,10 @@ import ExtendDeadlineDialog from './ExtendDeadlineDialog.vue';
 /**
  * "供应商响应"页签（M07 §5、M10 §5）：密封时（开标前）只有响应状态和时间，报价合计显示 🔒（05 §7.1 S-1，参考 PPT #23 补充）；
  * 开标后显示各家当前版本的合计，有 inquiry:evaluate 的可以点进报价详情。
- * 勾选未响应（已邀请）的供应商催报（R07-8）、延期（R07-10）、全部响应后提前截止（R10-2）
+ * 勾选未响应（已邀请）的供应商催报（R07-8）、延期（R07-10）、全部响应后提前截止（R10-2）。
+ * M13：roundNo 指定查看哪一轮（默认当前轮次）；作废的旧轮次只读，没有催报、延期等操作
  */
-const props = defineProps<{ inquiry: InquiryDetailDto }>();
+const props = defineProps<{ inquiry: InquiryDetailDto; roundNo?: number }>();
 const emit = defineEmits<{ changed: [InquiryDetailDto] }>();
 
 const { t, locale } = useI18n();
@@ -30,7 +31,10 @@ const picked = ref<QuoteResponseDto[]>([]);
 const acting = ref(false);
 const extendVisible = ref(false);
 
-const can = (action: InquiryDetailDto['allowedActions'][number]) => props.inquiry.allowedActions.includes(action);
+const viewRoundNo = computed(() => props.roundNo ?? props.inquiry.currentRoundNo);
+const isCurrent = computed(() => viewRoundNo.value === props.inquiry.currentRoundNo);
+const can = (action: InquiryDetailDto['allowedActions'][number]) =>
+  isCurrent.value && props.inquiry.allowedActions.includes(action);
 const canRemind = computed(() => can('remind'));
 const canExtend = computed(() => can('extendDeadline'));
 const canCloseEarly = computed(() => can('closeEarly'));
@@ -49,12 +53,12 @@ const summary = computed(() =>
 );
 /** 截止后仍是"已邀请"的显示为"未响应"（05 §4） */
 const noResponse = (row: QuoteResponseDto) =>
-  row.status === 'INVITED' && props.inquiry.currentRoundStatus !== 'WAITING_QUOTES';
+  row.status === 'INVITED' && !(isCurrent.value && props.inquiry.currentRoundStatus === 'WAITING_QUOTES');
 
 async function load(): Promise<void> {
   loading.value = true;
   try {
-    const res = await inquiriesApi.responses(props.inquiry.id, props.inquiry.currentRoundNo);
+    const res = await inquiriesApi.responses(props.inquiry.id, viewRoundNo.value);
     rows.value = res.items;
     sealed.value = res.sealed;
     picked.value = [];
@@ -96,7 +100,7 @@ async function closeEarly(): Promise<void> {
 }
 
 // 动作接口返回新的详情（催报、延期、补充邀请、开标……）时刷新
-watch(() => props.inquiry, load, { immediate: true });
+watch(() => [props.inquiry, props.roundNo], load, { immediate: true });
 </script>
 
 <template>
@@ -230,7 +234,7 @@ watch(() => props.inquiry, load, { immediate: true });
             v-if="row.versionCount > 0"
             :to="{
               name: 'inquiry-quote',
-              params: { id: inquiry.id, roundNo: inquiry.currentRoundNo, quoteId: row.id },
+              params: { id: inquiry.id, roundNo: viewRoundNo, quoteId: row.id },
             }"
             class="view-link"
           >

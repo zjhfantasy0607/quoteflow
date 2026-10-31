@@ -41,7 +41,7 @@ function invitee(
   };
 }
 
-async function open(list: InquiryInviteeDto[]): Promise<VueWrapper> {
+async function open(list: InquiryInviteeDto[], roundNo?: number): Promise<VueWrapper> {
   mocks.invitees.mockResolvedValue(list);
   const pinia = createPinia();
   setActivePinia(pinia);
@@ -53,7 +53,7 @@ async function open(list: InquiryInviteeDto[]): Promise<VueWrapper> {
     ],
   });
   const w = mount(PublishDialog, {
-    props: { inquiry, modelValue: false },
+    props: { inquiry, modelValue: false, roundNo },
     global: { plugins: [i18n, ElementPlus, pinia, router], components: ElementPlusIcons },
     attachTo: document.body,
   });
@@ -113,6 +113,17 @@ describe('PublishDialog', () => {
     ]);
     expect(dialog().textContent).toContain('以下供应商已停用，请先在"邀请供应商"页签移除：停用的供应商');
     expect(publishButton().disabled).toBe(true);
+    w.unmount();
+  });
+
+  it('M13 变更草稿发布：标题、上一轮作废的说明、通知名单', async () => {
+    const w = await open([invitee('TS-ZH', '深圳星光电子'), invitee('TS-NEW', '新增供应商')], 2);
+    expect(dialog().querySelector('.el-dialog__title')?.textContent).toBe('通知供应商重新报价（第 2 轮）');
+    const text = dialog().textContent ?? '';
+    expect(text).toContain('发布后第 1 轮作废');
+    expect(text).toContain('上一轮也受邀的供应商收到变更通知');
+    expect(text).toContain('将通知以下 2 家供应商按新规格报价');
+    expect(dialog().querySelector('.el-dialog__footer')?.textContent).toContain('确定发布');
     w.unmount();
   });
 });

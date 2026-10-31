@@ -137,6 +137,8 @@ function detail(extra: Partial<PortalQuoteDetailDto> = {}): PortalQuoteDetailDto
     currentVersion: null,
     versionCount: 0,
     negotiationStatus: null,
+    rounds: [{ quoteId: 'q1', roundNo: 1, roundStatus: 'WAITING_QUOTES', status: 'INVITED' }],
+    diff: null,
     allowedActions: [],
     ...extra,
   };
@@ -231,7 +233,8 @@ describe('PortalQuoteDetailPage', () => {
     let w = await mountPage(
       detail({ status: 'VOID', round: { ...detail().round, roundNo: 1, status: 'SUPERSEDED' } }),
     );
-    expect(w.find('.el-alert').text()).toContain('本报价单已作废（第 1 轮），只能查看');
+    // M13：规格变更作废的旧轮次单独说明
+    expect(w.find('.el-alert').text()).toContain('询价规格已变更，第 1 轮的报价已作废，只能查看');
     w.unmount();
 
     w = await mountPage(
@@ -256,6 +259,69 @@ describe('PortalQuoteDetailPage', () => {
     w = await mountPage(detail({ status: 'LOST', round: evaluated }));
     expect(w.find('.el-alert').text()).toContain('本次未中标，感谢贵司的参与');
     expect(w.text()).toContain('未中标');
+    w.unmount();
+  });
+
+  it('R13-8 规格变更后：旧轮次说明已作废并引导到最新一轮；第 2 轮显示变更说明与规格对比；可以按轮次切换', async () => {
+    const rounds: PortalQuoteDetailDto['rounds'] = [
+      { quoteId: 'q1', roundNo: 1, roundStatus: 'SUPERSEDED', status: 'VOID' },
+      { quoteId: 'q2', roundNo: 2, roundStatus: 'WAITING_QUOTES', status: 'INVITED' },
+    ];
+    let w = await mountPage(
+      detail({ status: 'VOID', round: { ...detail().round, roundNo: 1, status: 'SUPERSEDED' }, rounds }),
+    );
+    const alert = w.find('.el-alert');
+    expect(alert.text()).toContain('询价规格已变更，第 1 轮的报价已作废，只能查看');
+    expect(alert.find('a').attributes('href')).toBe('/portal/quotes/q2');
+    expect(alert.text()).toContain('前往第 2 轮报价');
+    expect(w.findAll('.round-strip .el-radio-button').map((b) => b.text())).toEqual(['第 1 轮', '第 2 轮']);
+    w.unmount();
+
+    w = await mountPage(
+      detail({
+        id: 'q2',
+        round: {
+          ...detail().round,
+          roundNo: 2,
+          changeReason: '显色指数 Ra80 → Ra90',
+          changeSummary: '两款都改为 Ra90',
+        },
+        rounds,
+        diff: {
+          roundNo: 2,
+          previousRoundNo: 1,
+          changeReason: '显色指数 Ra80 → Ra90',
+          changeSummary: '两款都改为 Ra90',
+          lines: [
+            {
+              change: 'REMOVED',
+              before: {
+                lineId: 'old',
+                lineNo: 2,
+                materialCode: null,
+                nameZh: '取消的电源',
+                nameEn: null,
+                spec: 'CV 24V',
+                unitCode: 'PCS',
+                quantity: '100',
+                category: { id: 'c1', code: 'PER-DRV', nameZh: '驱动电源', nameEn: 'LED Driver' },
+                brand: null,
+                drawingRef: null,
+              },
+              after: null,
+              changedFields: [],
+              files: { added: [], removed: [] },
+            },
+          ],
+          files: { added: [], removed: [] },
+          summary: { ADDED: 0, REMOVED: 1, MODIFIED: 0, UNCHANGED: 1 },
+        },
+      }),
+    );
+    expect(w.text()).toContain('两款都改为 Ra90');
+    expect(w.text()).toContain('规格对比（第 1 轮 → 第 2 轮）');
+    expect(w.find('.round-diff').text()).toContain('取消的电源');
+    expect(w.find('.banner').exists()).toBe(false);
     w.unmount();
   });
 

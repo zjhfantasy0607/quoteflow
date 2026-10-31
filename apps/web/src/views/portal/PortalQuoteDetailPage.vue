@@ -10,6 +10,7 @@ import { portalApi } from '@/api/portal';
 import DictTag from '@/components/DictTag.vue';
 import FilePreview from '@/components/FilePreview.vue';
 import PageHeader from '@/components/PageHeader.vue';
+import RoundDiffTable from '@/components/RoundDiffTable.vue';
 import StatusTag from '@/components/StatusTag.vue';
 import { formatFileSize } from '@/utils/files';
 import { formatDateTime, pickName } from '@/utils/format';
@@ -65,6 +66,12 @@ const attachments = computed<(PortalFileDto & { lineNo: number | null })[]>(() =
 const showChange = computed(
   () => !!detail.value && detail.value.round.roundNo > 1 && !!detail.value.round.changeReason,
 );
+/** M13：本供应商在这张询价单最新一轮的报价单（旧轮次作废后引导过去） */
+const latestRound = computed(() => detail.value?.rounds.at(-1) ?? null);
+
+function openQuote(quoteId: string): void {
+  if (quoteId !== id.value) void router.push({ name: 'portal-quote', params: { quoteId } });
+}
 /** 已截止：轮次不再等待报价，或者截止时间已过（截止任务还没执行时轮次仍是等待报价，R09-1） */
 const closed = computed(() => {
   const round = detail.value?.round;
@@ -131,6 +138,22 @@ watch(
         class="banner"
       />
       <el-alert
+        v-else-if="detail.status === 'VOID' && detail.round.status === 'SUPERSEDED'"
+        type="warning"
+        :title="t('portal.quote.supersededBanner', { no: detail.round.roundNo })"
+        show-icon
+        :closable="false"
+        class="banner"
+      >
+        <router-link
+          v-if="latestRound && latestRound.quoteId !== detail.id"
+          :to="{ name: 'portal-quote', params: { quoteId: latestRound.quoteId } }"
+          class="link"
+        >
+          {{ t('portal.quote.goToRound', { no: latestRound.roundNo }) }}
+        </router-link>
+      </el-alert>
+      <el-alert
         v-else-if="detail.status === 'VOID'"
         type="warning"
         :title="t('portal.quote.voidBanner', { no: detail.round.roundNo })"
@@ -162,6 +185,18 @@ watch(
         :closable="false"
         class="banner"
       />
+
+      <div v-if="detail.rounds.length > 1" class="round-strip">
+        <el-radio-group
+          :model-value="detail.id"
+          size="small"
+          @change="(v: string | number | boolean | undefined) => openQuote(String(v))"
+        >
+          <el-radio-button v-for="r in detail.rounds" :key="r.quoteId" :value="r.quoteId">
+            {{ t('portal.quote.roundTab', { no: r.roundNo }) }}
+          </el-radio-button>
+        </el-radio-group>
+      </div>
 
       <el-card shadow="never" class="qf-card section">
         <template #header>
@@ -214,6 +249,12 @@ watch(
             <span class="pre">{{ detail.round.changeSummary }}</span>
           </el-descriptions-item>
         </el-descriptions>
+        <template v-if="detail.diff">
+          <div class="diff-title">
+            {{ t('roundDiff.title', { from: detail.diff.previousRoundNo, to: detail.diff.roundNo }) }}
+          </div>
+          <RoundDiffTable :diff="detail.diff" />
+        </template>
       </el-card>
 
       <el-card shadow="never" class="qf-card section">
@@ -342,6 +383,16 @@ watch(
 }
 .muted {
   color: var(--el-text-color-placeholder);
+}
+.round-strip {
+  margin-bottom: 12px;
+}
+.link {
+  color: var(--el-color-primary);
+}
+.diff-title {
+  margin: 16px 0 8px;
+  font-weight: 600;
 }
 /* 下载按钮是 <a>，去掉链接下划线，和"在线预览"一致 */
 a.el-button {

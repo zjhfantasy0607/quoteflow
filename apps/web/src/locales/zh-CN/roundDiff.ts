@@ -1,0 +1,28 @@
+// 规格对比（M13）：变更编辑页、询价详情的轮次查看与门户报价详情共用
+export default {
+  title: '规格对比（第 {from} 轮 → 第 {to} 轮）',
+  summary: '新增 {added} 行 · 删除 {removed} 行 · 修改 {modified} 行 · 未变 {unchanged} 行',
+  showUnchanged: '显示未变化的行',
+  noChanges: '询价行和附件与上一轮相同',
+  wholeFiles: '整单附件',
+  change: { ADDED: '新增', REMOVED: '删除', MODIFIED: '修改', UNCHANGED: '未变' },
+  fields: {
+    nameZh: '物料名称',
+    nameEn: '英文名称',
+    spec: '规格型号',
+    unitCode: '单位',
+    quantity: '数量',
+    category: '材料分类',
+    brand: '品牌',
+    drawingRef: '图纸/规格书编号',
+    remark: '备注',
+  },
+  columns: { line: '行号', item: '物料', change: '变化', detail: '变化内容' },
+  lineNo: '第 {no} 行',
+  lineMove: '第 {from} 行 → 第 {to} 行',
+  fieldChange: '{field}：{before} → {after}',
+  lineSummary: '{spec} · 数量 {quantity} {unit}',
+  fileAdded: '新增附件：{name}',
+  fileRemoved: '删除附件：{name}',
+  empty: '（空）',
+};

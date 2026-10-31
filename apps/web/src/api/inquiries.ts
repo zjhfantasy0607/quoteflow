@@ -1,6 +1,7 @@
 import type {
   AttachInquiryFileInput,
   AwardRoundInput,
+  ChangeRoundParams,
   AuditLogDto,
   CopyLineFilesInput,
   CreateInquiryInput,
@@ -14,6 +15,7 @@ import type {
   InquiryLineDto,
   InquiryListItemDto,
   InquiryListParams,
+  InquiryRoundBriefDto,
   InquiryRoundDto,
   InquiryUserOptionDto,
   InviteeCandidateDto,
@@ -22,6 +24,7 @@ import type {
   NegotiationThreadDto,
   Paginated,
   QuoteVersionDto,
+  RoundDiffDto,
   RoundMatrixDto,
   RoundQuoteDetailDto,
   RoundResponsesDto,
@@ -55,6 +58,18 @@ export const inquiriesApi = {
     get<Paginated<FileAccessLogDto>>(`/inquiries/${id}/file-access-logs`, query),
 
   round: (id: string, roundNo: number) => get<InquiryRoundDto>(roundPath(id, roundNo)),
+  /** 轮次列表（M13） */
+  rounds: (id: string) => get<InquiryRoundBriefDto[]>(`/inquiries/${id}/rounds`),
+  /** 发起规格变更：复制当前轮生成第 N 轮草稿（M13，需要 inquiry:changeSpec） */
+  createChangeRound: (id: string, body: ChangeRoundParams) =>
+    post<InquiryRoundDto>(`/inquiries/${id}/rounds`, body),
+  /** 保存变更说明（整体替换） */
+  updateChangeRound: (id: string, roundNo: number, body: ChangeRoundParams) =>
+    put<InquiryRoundDto>(roundPath(id, roundNo), body),
+  /** 放弃变更：删除草稿轮次，返回最新详情 */
+  discardChangeRound: (id: string, roundNo: number) => del<InquiryDetailDto>(roundPath(id, roundNo)),
+  /** 与上一轮的规格对比 */
+  roundDiff: (id: string, roundNo: number) => get<RoundDiffDto>(`${roundPath(id, roundNo)}/diff`),
   addLine: (id: string, roundNo: number, body: CreateLineParams) =>
     post<InquiryLineDto>(`${roundPath(id, roundNo)}/lines`, body, { silent: true }),
   addFromMaterials: (id: string, roundNo: number, items: { materialId: string; quantity: string }[]) =>

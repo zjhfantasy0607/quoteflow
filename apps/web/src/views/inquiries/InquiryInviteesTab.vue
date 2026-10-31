@@ -13,9 +13,10 @@ import LateInviteDialog from './LateInviteDialog.vue';
 
 /**
  * "邀请供应商"页签（M07 §5）：第 1 轮发布前（editInvitees）上方筛选、下方勾选候选供应商，右侧是已选名单，
- * 保存后整体替换；发布后变为只读名单 +"补充邀请"
+ * 保存后整体替换；发布后变为只读名单 +"补充邀请"。
+ * M13：有变更草稿时名单只影响下一轮——详情页仍按当前轮显示（只读 + 补充邀请），变更编辑页传 forChangeRound 在那里维护
  */
-const props = defineProps<{ inquiry: InquiryDetailDto }>();
+const props = defineProps<{ inquiry: InquiryDetailDto; forChangeRound?: boolean }>();
 const emit = defineEmits<{ changed: [InquiryDetailDto]; dirty: [boolean] }>();
 
 const { t, locale } = useI18n();
@@ -27,8 +28,14 @@ const saving = ref(false);
 const lateVisible = ref(false);
 const candidates = ref<InstanceType<typeof InviteeCandidatesTable> | null>(null);
 
-const editable = computed(() => props.inquiry.allowedActions.includes('editInvitees'));
-const canLateInvite = computed(() => props.inquiry.allowedActions.includes('lateInvite'));
+const editable = computed(
+  () =>
+    props.inquiry.allowedActions.includes('editInvitees') &&
+    (props.forChangeRound || !props.inquiry.draftRoundNo),
+);
+const canLateInvite = computed(
+  () => !props.forChangeRound && props.inquiry.allowedActions.includes('lateInvite'),
+);
 const savedIds = computed(() => invitees.value.map((i) => i.supplier.id));
 const dirty = computed(() => {
   const saved = new Set(savedIds.value);

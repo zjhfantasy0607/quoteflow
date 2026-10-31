@@ -26,9 +26,10 @@ import AwardDialog from './AwardDialog.vue';
  * "比价评标"页签（M11 §5，参考 PPT #7、#8）：汇总表（每家一行，入围勾选最多 2 家、合计最低高亮、导出 Excel）→
  * 询价行切换 → 明细矩阵（行是 inMatrix 字段、列是各家当前版本；含税单价最低高亮，与上一版本相比变化的单元格高亮、
  * 悬停看原值；"只看差异"隐藏各家取值相同的字段）。没有 quote.amount 时金额显示 🔒、不标最低价。
- * M12：评标中时工具栏有"定标"按钮（inquiry:award），定标后把最新详情交给详情页刷新
+ * M12：评标中时工具栏有"定标"按钮（inquiry:award），定标后把最新详情交给详情页刷新。
+ * M13：roundNo 指定查看哪一轮（默认当前轮次）；开过标的旧轮次只读（不能入围、定标），照样能导出
  */
-const props = defineProps<{ inquiry: InquiryDetailDto; refreshKey?: number }>();
+const props = defineProps<{ inquiry: InquiryDetailDto; refreshKey?: number; roundNo?: number }>();
 const emit = defineEmits<{ shortlisted: []; awarded: [InquiryDetailDto] }>();
 
 const { t, locale } = useI18n();
@@ -45,7 +46,10 @@ const onlyDiff = ref(false);
 
 const UNIT_PRICE_KEY = 'unit_price_incl_tax';
 const canExport = computed(() => props.inquiry.allowedActions.includes('exportMatrix'));
-const canAward = computed(() => props.inquiry.allowedActions.includes('award'));
+const viewRoundNo = computed(() => props.roundNo ?? props.inquiry.currentRoundNo);
+const canAward = computed(
+  () => viewRoundNo.value === props.inquiry.currentRoundNo && props.inquiry.allowedActions.includes('award'),
+);
 const opened = computed(() => matrix.value?.roundStatus !== 'WAITING_QUOTES');
 const quoted = computed(() => matrix.value?.suppliers.filter((s) => s.quoted) ?? []);
 const shortlistCount = computed(() => matrix.value?.suppliers.filter((s) => s.shortlisted).length ?? 0);
@@ -123,7 +127,7 @@ async function exportMatrix(): Promise<void> {
   exporting.value = true;
   try {
     await downloadFile(
-      inquiriesApi.matrixExportUrl(props.inquiry.id, props.inquiry.currentRoundNo),
+      inquiriesApi.matrixExportUrl(props.inquiry.id, viewRoundNo.value),
       undefined,
       'matrix.xlsx',
     );
@@ -141,7 +145,7 @@ async function onAwarded(updated: InquiryDetailDto): Promise<void> {
 async function load(): Promise<void> {
   loading.value = true;
   try {
-    const m = await inquiriesApi.matrix(props.inquiry.id, props.inquiry.currentRoundNo);
+    const m = await inquiriesApi.matrix(props.inquiry.id, viewRoundNo.value);
     matrix.value = m;
     sealed.value = false;
     if (!m.lines.some((l) => l.lineId === lineId.value)) lineId.value = m.lines[0]?.lineId ?? '';
@@ -156,7 +160,7 @@ async function load(): Promise<void> {
   }
 }
 
-watch(() => [props.inquiry.id, props.inquiry.currentRoundNo, props.refreshKey], load, { immediate: true });
+watch(() => [props.inquiry.id, viewRoundNo.value, props.refreshKey], load, { immediate: true });
 </script>
 
 <template>

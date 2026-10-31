@@ -8,9 +8,10 @@ import InquiryNegotiationPanel from './InquiryNegotiationPanel.vue';
 
 /**
  * "议价"页签（M11 §5，有入围供应商时出现）：每家入围供应商一个子页签（轮到我方处理的带红点），
- * 内容是 InquiryNegotiationPanel。议价有变化时通知详情页刷新比价矩阵
+ * 内容是 InquiryNegotiationPanel。议价有变化时通知详情页刷新比价矩阵。
+ * M13：roundNo 指定查看哪一轮（默认当前轮次）；旧轮次的议价已关闭，只能查看
  */
-const props = defineProps<{ inquiry: InquiryDetailDto }>();
+const props = defineProps<{ inquiry: InquiryDetailDto; roundNo?: number }>();
 const emit = defineEmits<{ changed: [] }>();
 
 const { t, locale } = useI18n();
@@ -26,7 +27,7 @@ const awaitingUs = (s: MatrixSupplierDto) =>
 async function load(): Promise<void> {
   loading.value = true;
   try {
-    const matrix = await inquiriesApi.matrix(props.inquiry.id, props.inquiry.currentRoundNo);
+    const matrix = await inquiriesApi.matrix(props.inquiry.id, props.roundNo ?? props.inquiry.currentRoundNo);
     suppliers.value = matrix.suppliers;
     if (!shortlisted.value.some((s) => s.quoteId === active.value))
       active.value = shortlisted.value[0]?.quoteId ?? '';
@@ -42,7 +43,9 @@ async function onChanged(): Promise<void> {
   emit('changed');
 }
 
-watch(() => [props.inquiry.id, props.inquiry.currentRound.shortlistCount], load, { immediate: true });
+watch(() => [props.inquiry.id, props.inquiry.currentRound.shortlistCount, props.roundNo], load, {
+  immediate: true,
+});
 </script>
 
 <template>

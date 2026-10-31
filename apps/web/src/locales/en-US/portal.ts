@@ -51,6 +51,10 @@ const portal: LocaleMessages['portal'] = {
     wonBanner:
       'Congratulations, your quotation has been awarded! Our purchasing team will contact you shortly about the contract.',
     lostBanner: 'Your quotation was not selected this time. Thank you for your participation.',
+    supersededBanner:
+      'The RFQ specifications have changed. Your quotation for round {no} is void and read-only.',
+    goToRound: 'Go to round {no}',
+    roundTab: 'Round {no}',
     change: 'Changes in round {no}',
     changeReason: 'Reason',
     changeSummary: 'Main changes',

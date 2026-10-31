@@ -16,9 +16,10 @@ import {
 
 /**
  * 发布对话框（R07-3、R07-6）：截止时间按北京时间选择；确认受邀名单；没有可用门户账号的供应商只提示、不阻止发布。
- * 截止时间的最短提前量（inquiry.minDeadlineHours）由服务端校验
+ * 截止时间的最短提前量（inquiry.minDeadlineHours）由服务端校验。
+ * M13：传 roundNo（变更草稿）时是"通知供应商重新报价"——发布第 N 轮，说明上一轮作废、谁收变更通知谁收邀请
  */
-const props = defineProps<{ inquiry: InquiryDetailDto }>();
+const props = defineProps<{ inquiry: InquiryDetailDto; roundNo?: number }>();
 const visible = defineModel<boolean>({ required: true });
 const emit = defineEmits<{ published: [InquiryDetailDto] }>();
 
@@ -42,6 +43,10 @@ const names = (list: InquiryInviteeDto[]) =>
   list.map((i) => pickName(i.supplier, locale.value)).join(t('common.listSeparator'));
 const left = computed(() => (deadline.value ? remainingText(deadlineInputToIso(deadline.value)) : null));
 const canPublish = computed(() => invitees.value.length > 0 && disabled.value.length === 0);
+const targetRoundNo = computed(() => props.roundNo ?? props.inquiry.currentRoundNo);
+/** 发布的是变更草稿（第 N 轮） */
+const isChange = computed(() => targetRoundNo.value !== props.inquiry.currentRoundNo);
+const changeParams = computed(() => ({ no: targetRoundNo.value, current: props.inquiry.currentRoundNo }));
 
 async function publish(): Promise<void> {
   if (!deadline.value) {
@@ -56,10 +61,14 @@ async function publish(): Promise<void> {
   try {
     const updated = await inquiriesApi.publish(
       props.inquiry.id,
-      props.inquiry.currentRoundNo,
+      targetRoundNo.value,
       deadlineInputToIso(deadline.value),
     );
-    ElMessage.success(t('inquiries.publish.done', { count: invitees.value.length }));
+    ElMessage.success(
+      isChange.value
+        ? t('inquiries.publish.changeDone', { no: targetRoundNo.value, count: invitees.value.length })
+        : t('inquiries.publish.done', { count: invitees.value.length }),
+    );
     visible.value = false;
     emit('published', updated);
   } catch {
@@ -84,12 +93,20 @@ watch(visible, async (open) => {
 <template>
   <el-dialog
     v-model="visible"
-    :title="t('inquiries.publish.title')"
+    :title="isChange ? t('inquiries.publish.changeTitle', changeParams) : t('inquiries.publish.title')"
     width="680px"
     :close-on-click-modal="false"
     append-to-body
   >
     <div v-loading="loading">
+      <el-alert
+        v-if="isChange"
+        type="warning"
+        :title="t('inquiries.publish.changeHint', changeParams)"
+        show-icon
+        :closable="false"
+        class="change-hint"
+      />
       <el-form label-position="top">
         <el-form-item :label="t('inquiries.publish.deadline')" required>
           <el-date-picker
@@ -107,7 +124,13 @@ watch(visible, async (open) => {
         </el-form-item>
       </el-form>
 
-      <div class="section-title">{{ t('inquiries.publish.invitees', { count: invitees.length }) }}</div>
+      <div class="section-title">
+        {{
+          isChange
+            ? t('inquiries.publish.changeInvitees', { count: invitees.length })
+            : t('inquiries.publish.invitees', { count: invitees.length })
+        }}
+      </div>
       <el-alert
         v-if="!loading && invitees.length === 0"
         type="error"
@@ -175,7 +198,7 @@ watch(visible, async (open) => {
     <template #footer>
       <el-button @click="visible = false">{{ t('common.actions.cancel') }}</el-button>
       <el-button type="primary" :loading="saving" :disabled="!canPublish" @click="publish">
-        {{ t('inquiries.publish.confirm') }}
+        {{ isChange ? t('inquiries.publish.changeConfirm') : t('inquiries.publish.confirm') }}
       </el-button>
     </template>
   </el-dialog>
@@ -192,6 +215,9 @@ watch(visible, async (open) => {
 }
 .alert {
   margin-top: 10px;
+}
+.change-hint {
+  margin-bottom: 12px;
 }
 .accounts {
   display: flex;

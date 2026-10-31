@@ -57,6 +57,13 @@ export const buyerRoute: RouteRecordRaw = {
       meta: { titleKey: 'nav.inquiryDetail', userType: 'INTERNAL', perm: 'inquiry:view' },
     },
     {
+      // 规格变更编辑页（M13）：页面按变更草稿的 allowedActions 决定能改什么
+      path: 'inquiries/:id/rounds/:roundNo/change',
+      name: 'inquiry-change',
+      component: () => import('@/views/inquiries/InquiryChangePage.vue'),
+      meta: { titleKey: 'nav.inquiryChange', userType: 'INTERNAL', perm: 'inquiry:view' },
+    },
+    {
       path: 'inquiries/:id/rounds/:roundNo/quotes/:quoteId',
       name: 'inquiry-quote',
       component: () => import('@/views/inquiries/InquiryQuoteDetailPage.vue'),

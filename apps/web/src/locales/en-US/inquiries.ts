@@ -246,6 +246,12 @@ const inquiries: LocaleMessages['inquiries'] = {
       'After publishing, the lines and attachments can no longer be changed, and the quotation template is locked to the active PPL version.',
     confirm: 'Publish',
     done: 'Published. Invitations were emailed to {count} suppliers',
+    changeTitle: 'Notify suppliers to quote again (round {no})',
+    changeHint:
+      'After publishing, round {current} is superseded: its quotations become void and open negotiations are closed. Quotations of round {no} are created for the suppliers below; those also invited in the previous round get a change notice with the reason and main changes, and new ones get an RFQ invitation.',
+    changeInvitees: 'The following {count} suppliers will be asked to quote for the new specifications',
+    changeConfirm: 'Publish',
+    changeDone: 'Round {no} published; {count} suppliers asked to quote again',
     saveInviteesFirst: 'Please save the changes to the invitee list first',
   },
   responses: {
@@ -332,6 +338,47 @@ const inquiries: LocaleMessages['inquiries'] = {
     empty: '(empty)',
     noQuotes: 'No valid quotations',
     noDiff: 'All suppliers have the same values on this line',
+  },
+  rounds: {
+    tab: 'Round {no}',
+    tabLabel: 'Round {no} ({status})',
+    readonly: 'Read-only',
+    draft: 'change draft',
+    draftBanner:
+      'There is an unpublished specification change (round {no}). Suppliers cannot see it until it is published; round {current} continues as usual.',
+    continueEdit: 'Continue editing',
+    supersededBanner: 'Round {no} has been superseded and is read-only (the RFQ is now in round {current})',
+    changeInfo: 'Changes in round {no}',
+  },
+  change: {
+    start: 'Change specifications',
+    startConfirm:
+      'The RFQ lines and attachments of round {current} will be copied into a draft of round {no}. Round {current} continues until the change is published. Continue?',
+    started: 'Draft of round {no} created',
+    title: 'Specification change · round {no}',
+    hint: 'Change draft: edit the RFQ lines and attachments, describe the change, then click "Notify suppliers to quote again". Suppliers cannot see the draft and round {current} continues until it is published; after publishing, round {current} is superseded and suppliers quote again for the new specifications.',
+    info: 'Change description',
+    reason: 'Reason for change',
+    summary: 'Main changes',
+    reasonPlaceholder: 'e.g. CRI Ra80 → Ra90',
+    summaryPlaceholder:
+      'Describe which specifications changed and which lines were added or removed; suppliers see this in the change notice and the portal',
+    saveInfo: 'Save description',
+    infoSaved: 'Change description saved',
+    infoRequired: 'Fill in and save the reason for change and the main changes before publishing',
+    infoUnsaved: 'The change description has unsaved edits; save them first',
+    lines: 'RFQ lines (round {no})',
+    files: 'Specifications and images (round {no})',
+    invitees: 'Invited suppliers (round {no})',
+    inviteesHint:
+      'Quotations of round {no} are created from this list when publishing: suppliers also invited in the previous round get a change notice, new ones get an RFQ invitation, and removed ones no longer take part.',
+    discard: 'Discard change',
+    discardConfirm:
+      'The draft of round {no}, including the edited RFQ lines and attachments, will be deleted and cannot be restored. Discard it?',
+    discarded: 'Specification change discarded',
+    publish: 'Notify suppliers to quote again',
+    notDraft: 'Round {no} is no longer a change draft',
+    noPermission: 'You cannot edit this change draft; it is read-only for you',
   },
   award: {
     button: 'Award',

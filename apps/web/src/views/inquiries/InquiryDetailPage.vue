@@ -4,7 +4,9 @@ import type {
   InquiryAction,
   InquiryApprovalDto,
   InquiryDetailDto,
+  InquiryRoundBriefDto,
   InquiryRoundDto,
+  RoundDiffDto,
 } from '@quoteflow/shared';
 import { ElMessage } from 'element-plus';
 import { computed, nextTick, ref, watch } from 'vue';
@@ -14,7 +16,9 @@ import { apiError, translateError } from '@/api/http';
 import { inquiriesApi } from '@/api/inquiries';
 import DictTag from '@/components/DictTag.vue';
 import PageHeader from '@/components/PageHeader.vue';
+import RoundDiffTable from '@/components/RoundDiffTable.vue';
 import StatusTag from '@/components/StatusTag.vue';
+import { useAuthStore } from '@/stores/auth';
 import { confirmAction, promptText } from '@/utils/dialogs';
 import { formatDateTime, pickName } from '@/utils/format';
 import { inquiryNo, remainingText } from '@/utils/inquiries';
@@ -35,11 +39,14 @@ import RoundProgress from './RoundProgress.vue';
  * 邀请供应商 / 供应商响应（发布后） / 比价评标（开标后） / 议价（有入围时） / 审批记录 / 下载日志（M08） / 操作日志）；
  * 待审批时页面底部是"审批操作"区（参考 PPT #22）。?tab= 指定打开的页签（从报价详情返回时回到"供应商响应"，议价邮件链接到"议价"）。
  * M12：定标在"比价评标"页签；评标完成后顶部是完成横幅（中标供应商、定标人与时间、定标说明、合同草稿号，参考 PPT #11），
- * 整单只读（按钮由 allowedActions 决定）
+ * 整单只读（按钮由 allowedActions 决定）。
+ * M13：有第 2 轮起显示轮次页签条（第 1 轮（已作废）🔒只读 / 第 2 轮（等待报价）/ 第 3 轮（变更草稿），参考 PPT #12），
+ * 切到作废的旧轮次时下方明细、响应、比价、议价都按那一轮显示且只读；变更草稿进入编辑页。第 2 轮起显示该轮的变更说明与规格对比
  */
 const { t, locale } = useI18n();
 const route = useRoute();
 const router = useRouter();
+const auth = useAuthStore();
 
 const id = computed(() => String(route.params.id));
 const inquiry = ref<InquiryDetailDto | null>(null);
@@ -58,15 +65,35 @@ const publishVisible = ref(false);
 const inviteesDirty = ref(false);
 /** 议价有变化时加 1，"比价评标"页签据此重新加载矩阵 */
 const matrixRefresh = ref(0);
+/** 全部轮次（M13） */
+const rounds = ref<InquiryRoundBriefDto[]>([]);
+/** 正在查看的轮次；null = 当前轮次 */
+const viewRoundNo = ref<number | null>(null);
+/** 所选轮次（第 2 轮起）与上一轮的规格对比 */
+const diff = ref<RoundDiffDto | null>(null);
 
 const can = (action: InquiryAction) => inquiry.value?.allowedActions.includes(action) ?? false;
 const canReview = computed(() => can('approve') || can('reject'));
-/** 当前轮次已发布（有供应商参与） */
-const published = computed(() => !!inquiry.value?.currentRound.publishedAt);
-/** R11-1：开标后才有比价；有入围供应商时才有议价页签 */
-const canEvaluate = computed(() => can('evaluate'));
+const currentNo = computed(() => inquiry.value?.currentRoundNo ?? 1);
+const selectedNo = computed(() => viewRoundNo.value ?? currentNo.value);
+/** 在看作废的旧轮次（R13-8 只读） */
+const viewingOld = computed(() => selectedNo.value !== currentNo.value);
+const selectedRound = computed(() => rounds.value.find((r) => r.roundNo === selectedNo.value) ?? null);
+/** 轮次页签条：有第 2 轮（含变更草稿）时才显示 */
+const showRounds = computed(() => rounds.value.length > 1);
+/** 所选轮次已发布（有供应商参与） */
+const published = computed(() =>
+  viewingOld.value ? !!selectedRound.value?.publishedAt : !!inquiry.value?.currentRound.publishedAt,
+);
+/** R11-1：开标后才有比价（开过标的旧轮次照样能看，R13-5）；有入围供应商时才有议价页签 */
+const canEvaluate = computed(() =>
+  viewingOld.value ? !!selectedRound.value?.openedAt && auth.hasPerm('inquiry:evaluate') : can('evaluate'),
+);
 const hasShortlist = computed(
-  () => canEvaluate.value && (inquiry.value?.currentRound.shortlistCount ?? 0) > 0,
+  () =>
+    canEvaluate.value &&
+    ((viewingOld.value ? selectedRound.value?.shortlistCount : inquiry.value?.currentRound.shortlistCount) ??
+      0) > 0,
 );
 /** 能打开的页签（?tab= 指定的不在里面时打开明细） */
 const tabs = computed(() => [
@@ -97,9 +124,53 @@ const deadlineText = computed(() => {
   return state ? t('inquiries.detail.deadlineValue', { time, left: state }) : time;
 });
 
+/** 所选轮次的询价行与附件；第 2 轮起另取规格对比 */
 async function loadRound(): Promise<void> {
   if (!inquiry.value) return;
-  round.value = await inquiriesApi.round(inquiry.value.id, inquiry.value.currentRoundNo);
+  const no = selectedNo.value;
+  round.value = await inquiriesApi.round(inquiry.value.id, no);
+  diff.value = no > 1 ? await inquiriesApi.roundDiff(inquiry.value.id, no) : null;
+}
+
+async function loadRounds(): Promise<void> {
+  rounds.value = await inquiriesApi.rounds(id.value);
+}
+
+/** 轮次页签条：变更草稿进入编辑页，其余切换下方内容 */
+async function selectRound(no: number): Promise<void> {
+  const target = rounds.value.find((r) => r.roundNo === no);
+  if (target?.status === 'DRAFT' && no > 1) {
+    await router.push({ name: 'inquiry-change', params: { id: id.value, roundNo: no } });
+    return;
+  }
+  viewRoundNo.value = no === currentNo.value ? null : no;
+  if (!tabs.value.includes(tab.value)) tab.value = 'lines';
+  await loadRound();
+}
+
+const roundLabel = (r: InquiryRoundBriefDto) =>
+  t('inquiries.rounds.tabLabel', {
+    no: r.roundNo,
+    status:
+      r.status === 'DRAFT' && r.roundNo > 1
+        ? t('inquiries.rounds.draft')
+        : t(`enums.RoundStatus.${r.status}`),
+  });
+
+/** R13-1：复制当前轮生成变更草稿，进入编辑页 */
+async function startChange(): Promise<void> {
+  const params = { current: currentNo.value, no: (rounds.value.at(-1)?.roundNo ?? currentNo.value) + 1 };
+  if (!(await confirmAction(t('inquiries.change.startConfirm', params), { type: 'info' }))) return;
+  acting.value = true;
+  try {
+    const created = await inquiriesApi.createChangeRound(id.value, {});
+    ElMessage.success(t('inquiries.change.started', { no: created.roundNo }));
+    await router.push({ name: 'inquiry-change', params: { id: id.value, roundNo: created.roundNo } });
+  } catch {
+    // 错误提示由 http 拦截器显示
+  } finally {
+    acting.value = false;
+  }
 }
 
 async function loadApprovals(): Promise<void> {
@@ -120,7 +191,7 @@ async function load(): Promise<void> {
   try {
     inquiry.value = await inquiriesApi.get(id.value);
     notFound.value = false;
-    await Promise.all([loadRound(), loadApprovals()]);
+    await Promise.all([loadRound(), loadRounds(), loadApprovals()]);
     if (tab.value === 'logs') await loadLogs();
   } catch (err) {
     const body = apiError(err);
@@ -135,7 +206,12 @@ async function load(): Promise<void> {
 async function afterAction(updated: InquiryDetailDto): Promise<void> {
   inquiry.value = updated;
   comment.value = '';
-  await Promise.all([loadRound(), loadApprovals(), tab.value === 'logs' ? loadLogs() : Promise.resolve()]);
+  await Promise.all([
+    loadRound(),
+    loadRounds(),
+    loadApprovals(),
+    tab.value === 'logs' ? loadLogs() : Promise.resolve(),
+  ]);
 }
 
 /** 入围名单变化后刷新详情（入围家数决定"议价"页签是否出现） */
@@ -249,6 +325,9 @@ watch(
   async () => {
     inquiry.value = null;
     round.value = null;
+    rounds.value = [];
+    viewRoundNo.value = null;
+    diff.value = null;
     logs.value = [];
     tab.value = typeof route.query.tab === 'string' ? route.query.tab : 'lines';
     inviteesDirty.value = false;
@@ -291,6 +370,14 @@ watch(
           </el-button>
           <el-button v-if="can('open')" type="primary" icon="Unlock" :loading="acting" @click="openBids">
             {{ t('inquiries.detail.actions.open') }}
+          </el-button>
+          <el-button
+            v-if="can('createChangeRound')"
+            icon="DocumentCopy"
+            :loading="acting"
+            @click="startChange"
+          >
+            {{ t('inquiries.change.start') }}
           </el-button>
           <el-button
             v-if="can('cancel')"
@@ -362,6 +449,24 @@ watch(
         class="banner"
       />
 
+      <el-alert
+        v-if="inquiry.draftRoundNo"
+        type="warning"
+        :title="
+          t('inquiries.rounds.draftBanner', { no: inquiry.draftRoundNo, current: inquiry.currentRoundNo })
+        "
+        show-icon
+        :closable="false"
+        class="banner draft-banner"
+      >
+        <router-link
+          :to="{ name: 'inquiry-change', params: { id: inquiry.id, roundNo: inquiry.draftRoundNo } }"
+          class="link"
+        >
+          {{ t('inquiries.rounds.continueEdit') }}
+        </router-link>
+      </el-alert>
+
       <el-card shadow="never" class="qf-card section">
         <el-descriptions :column="3" border>
           <el-descriptions-item :label="t('inquiries.fields.status')">
@@ -418,6 +523,47 @@ watch(
         <RoundProgress :round="inquiry.currentRound" />
       </el-card>
 
+      <div v-if="showRounds" class="round-strip">
+        <el-radio-group
+          :model-value="selectedNo"
+          size="small"
+          @change="(v: string | number | boolean | undefined) => selectRound(Number(v))"
+        >
+          <el-radio-button v-for="r in rounds" :key="r.roundNo" :value="r.roundNo">
+            {{ roundLabel(r) }}
+            <span v-if="r.status === 'SUPERSEDED' || r.status === 'CANCELLED'" class="readonly">
+              <el-icon><Lock /></el-icon>{{ t('inquiries.rounds.readonly') }}
+            </span>
+          </el-radio-button>
+        </el-radio-group>
+      </div>
+      <el-alert
+        v-if="viewingOld"
+        type="info"
+        :title="t('inquiries.rounds.supersededBanner', { no: selectedNo, current: inquiry.currentRoundNo })"
+        show-icon
+        :closable="false"
+        class="banner"
+      />
+      <el-card v-if="round && round.roundNo > 1" shadow="never" class="qf-card section">
+        <template #header>
+          <span class="section-title">{{ t('inquiries.rounds.changeInfo', { no: round.roundNo }) }}</span>
+        </template>
+        <el-descriptions :column="1" border>
+          <el-descriptions-item :label="t('inquiries.change.reason')">
+            <span class="pre">{{ round.changeReason }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item :label="t('inquiries.change.summary')">
+            <span class="pre">{{ round.changeSummary }}</span>
+          </el-descriptions-item>
+        </el-descriptions>
+        <el-collapse v-if="diff" class="diff">
+          <el-collapse-item :title="t('roundDiff.title', { from: diff.previousRoundNo, to: diff.roundNo })">
+            <RoundDiffTable :diff="diff" />
+          </el-collapse-item>
+        </el-collapse>
+      </el-card>
+
       <el-card shadow="never" class="qf-card section">
         <el-tabs v-model="tab">
           <el-tab-pane name="lines" :label="t('inquiries.detail.tabs.lines')">
@@ -441,7 +587,7 @@ watch(
             />
           </el-tab-pane>
           <el-tab-pane v-if="published" name="responses" :label="t('inquiries.detail.tabs.responses')" lazy>
-            <InquiryResponsesTab :inquiry="inquiry" @changed="afterAction" />
+            <InquiryResponsesTab :inquiry="inquiry" :round-no="selectedNo" @changed="afterAction" />
           </el-tab-pane>
           <el-tab-pane
             v-if="canEvaluate"
@@ -451,6 +597,7 @@ watch(
           >
             <InquiryEvaluationTab
               :inquiry="inquiry"
+              :round-no="selectedNo"
               :refresh-key="matrixRefresh"
               @shortlisted="reloadInquiry"
               @awarded="afterAction"
@@ -462,7 +609,7 @@ watch(
             :label="t('inquiries.detail.tabs.negotiation')"
             lazy
           >
-            <InquiryNegotiationTab :inquiry="inquiry" @changed="matrixRefresh += 1" />
+            <InquiryNegotiationTab :inquiry="inquiry" :round-no="selectedNo" @changed="matrixRefresh += 1" />
           </el-tab-pane>
           <el-tab-pane name="approvals" :label="t('inquiries.detail.tabs.approvals')">
             <ApprovalTimeline :items="approvals" />
@@ -517,6 +664,22 @@ watch(
 }
 .completed-banner :deep(.el-alert__description) {
   line-height: 1.7;
+}
+.link {
+  color: var(--el-color-primary);
+}
+.round-strip {
+  margin-bottom: 12px;
+}
+.readonly {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+}
+.diff {
+  margin-top: 12px;
+  border-top: none;
 }
 .section-title {
   font-weight: 600;
