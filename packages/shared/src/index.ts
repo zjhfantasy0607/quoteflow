@@ -20,6 +20,7 @@ export * from './schemas/ppl';
 export * from './schemas/inquiries';
 export * from './schemas/portal';
 export * from './schemas/negotiations';
+export * from './schemas/contracts';
 export * from './types/system';
 export * from './types/infra';
 export * from './types/materials';

@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { computeInquiryActions, isRoundEditable, type InquiryActionContext } from '../inquiry-actions';
+import {
+  computeInquiryActions,
+  isInquiryReadonly,
+  isRoundEditable,
+  type InquiryActionContext,
+} from '../inquiry-actions';
 import { PRESET_ROLES } from '../roles';
 import { ROUND_TERMINAL_STATUSES, ROUND_TRANSITIONS } from '../status';
 import {
+  awardRoundSchema,
   copyLineFilesSchema,
   createInquirySchema,
   createLineSchema,
@@ -263,5 +269,44 @@ describe('M07 受邀名单与发布', () => {
     expect(offset.toISOString()).toBe(utc.toISOString());
     expect(publishRoundSchema.safeParse({ deadline: '2026-11-20 17:00' }).success).toBe(false);
     expect(publishRoundSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('M12 定标与只读', () => {
+  const rounds = ['DRAFT', 'WAITING_QUOTES', 'QUOTES_CLOSED', 'OPENED', 'EVALUATED'] as const;
+
+  it('R12-1 定标只在评标中（OPENED）出现，要 inquiry:award（采购主管有，采购员没有）', () => {
+    const has = (round: (typeof rounds)[number], role: string) =>
+      computeInquiryActions(ctx('APPROVED', round), perms(role)).includes('award');
+    expect(rounds.filter((r) => has(r, 'PURCHASE_MANAGER'))).toEqual(['OPENED']);
+    expect(rounds.some((r) => has(r, 'BUYER'))).toBe(false);
+    expect(computeInquiryActions(ctx('CANCELLED', 'OPENED'), perms('PURCHASE_MANAGER'))).not.toContain(
+      'award',
+    );
+  });
+
+  it('R12-8 评标完成或取消后只读：只剩查看类动作', () => {
+    expect(isInquiryReadonly(ctx('APPROVED', 'EVALUATED'))).toBe(true);
+    expect(isInquiryReadonly(ctx('CANCELLED', 'CANCELLED'))).toBe(true);
+    expect(isInquiryReadonly(ctx('CANCELLED', 'DRAFT'))).toBe(true);
+    for (const round of ['DRAFT', 'WAITING_QUOTES', 'QUOTES_CLOSED', 'OPENED'] as const) {
+      expect(isInquiryReadonly(ctx('APPROVED', round))).toBe(false);
+    }
+    expect(isInquiryReadonly(ctx('DRAFT'))).toBe(false);
+    expect(computeInquiryActions(ctx('APPROVED', 'EVALUATED'), perms('PURCHASE_MANAGER'))).toEqual([
+      'evaluate',
+      'exportMatrix',
+      'viewAccessLog',
+    ]);
+  });
+
+  it('定标说明可选，空白视为没填', () => {
+    expect(awardRoundSchema.parse({ quoteId: 'q1', comment: '  ' })).toEqual({
+      quoteId: 'q1',
+      comment: undefined,
+    });
+    expect(awardRoundSchema.parse({ quoteId: 'q1', comment: ' 价格最低 ' }).comment).toBe('价格最低');
+    expect(awardRoundSchema.safeParse({}).success).toBe(false);
+    expect(awardRoundSchema.safeParse({ quoteId: 'q1', comment: 'x'.repeat(501) }).success).toBe(false);
   });
 });

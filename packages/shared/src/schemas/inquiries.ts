@@ -209,3 +209,12 @@ export const remindQuotesSchema = z.object({
   quoteIds: z.array(idSchema).min(1).max(MAX_INVITEES).transform(unique),
 });
 export type RemindQuotesInput = z.infer<typeof remindQuotesSchema>;
+
+// ---------- 定标（M12） ----------
+
+/** POST .../rounds/:roundNo/award（R12-1）：中标报价必须是评标中（服务端校验 AWARD_INVALID_QUOTE）；定标说明可选 */
+export const awardRoundSchema = z.object({
+  quoteId: idSchema,
+  comment: optionalText(500),
+});
+export type AwardRoundInput = z.infer<typeof awardRoundSchema>;

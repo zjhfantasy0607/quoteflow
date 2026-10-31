@@ -72,7 +72,23 @@ export interface InquiryDetailDto extends InquiryListItemDto {
   completedAt: string | null;
   updatedAt: string;
   currentRound: InquiryRoundSummaryDto;
+  /** 定标结果（M12）：当前轮次评标完成后才有，详情页顶部的完成横幅用它 */
+  award: InquiryAwardDto | null;
   allowedActions: InquiryAction[];
+}
+
+/** 定标结果（R12-4、R12-5）：不含金额（合同金额在合同里按 contract.amount 脱敏） */
+export interface InquiryAwardDto {
+  roundNo: number;
+  /** 中标的报价单 */
+  quoteId: string;
+  supplier: { id: string; code: string; nameZh: string; nameEn: string | null };
+  awardedAt: string;
+  awardedBy: UserBriefDto | null;
+  /** 定标说明 */
+  comment: string | null;
+  /** 定标时自动生成的合同草稿（I-9） */
+  contract: { id: string; contractNo: string } | null;
 }
 
 /** 规格书或产品图的一条挂载（R06-5）。同一个文件可以挂在多行上（复制到其他行），每条挂载各有 id */

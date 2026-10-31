@@ -55,6 +55,16 @@ function currentRoundOpened(ctx: InquiryActionContext): boolean {
   return round === RoundStatus.OPENED || round === RoundStatus.EVALUATED || !!ctx.currentRoundOpenedAt;
 }
 
+/**
+ * R12-8、#11：询价完成（当前轮次评标完成）或取消后整单只读，修改类接口一律 INQUIRY_COMPLETED_READONLY，
+ * 查询照常（历史可查不可改）
+ */
+export function isInquiryReadonly(
+  ctx: Pick<InquiryActionContext, 'docStatus' | 'currentRoundStatus'>,
+): boolean {
+  return ctx.docStatus === InquiryDocStatus.CANCELLED || ctx.currentRoundStatus === RoundStatus.EVALUATED;
+}
+
 /** 第 1 轮还没发布 */
 function firstRoundUnpublished(ctx: InquiryActionContext): boolean {
   return ctx.currentRoundNo === 1 && ctx.currentRoundStatus === RoundStatus.DRAFT;
@@ -77,7 +87,8 @@ export function isRoundEditable(
  * 轮次类动作（发布、补充邀请、催报、延期）都针对当前轮次。
  * M06 覆盖 edit、submit、approve、reject、发布前的 cancel；M07 覆盖 editInvitees、publish、lateInvite、
  * remind、extendDeadline 和发布后的 cancel；M08 覆盖 viewAccessLog；M10 覆盖 closeEarly、open；
- * M11 覆盖 evaluate、shortlist、exportMatrix；其余动作由 M12 起的模块补充。
+ * M11 覆盖 evaluate、shortlist、exportMatrix；M12 覆盖 award。询价完成或取消后只剩查看类动作（R12-8）；
+ * 其余动作由 M13 补充。
  */
 export function computeInquiryActions(ctx: InquiryActionContext, perms: PermissionChecker): InquiryAction[] {
   const can = (code: PermissionCode) => perms.has(code);
@@ -116,6 +127,8 @@ export function computeInquiryActions(ctx: InquiryActionContext, perms: Permissi
   }
   // R11-6：入围只在评标中（OPENED）
   if (approved && round === RoundStatus.OPENED && can('inquiry:evaluate')) actions.push('shortlist');
+  // R12-1：定标只在评标中（OPENED）；中标报价必须是评标中，由接口复核（AWARD_INVALID_QUOTE）
+  if (approved && round === RoundStatus.OPENED && can('inquiry:award')) actions.push('award');
   // R06-9、R07-11：没取消、当前轮次还没评标完成都能取消
   const cancellable: InquiryDocStatus[] = [
     InquiryDocStatus.DRAFT,
