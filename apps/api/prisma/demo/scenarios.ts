@@ -1,9 +1,10 @@
 // 演示场景（docs/06-种子数据.md §3）。单据一律通过 service 方法创建，状态和不变量与真实操作一致。
-// 哪个模块完成就在这里补哪个场景：M06 → D1、D2；M09 → D3；M11 → D4。
+// 哪个模块完成就在这里补哪个场景：M06 → D1、D2；M09 → D3；M11 → D4；M12 → D5。
 import type { INestApplicationContext } from '@nestjs/common';
 import {
   approveInquirySchema,
   attachInquiryFileSchema,
+  awardRoundSchema,
   createInquirySchema,
   createLineSchema,
   linesFromMaterialsSchema,
@@ -24,6 +25,7 @@ import { InquiryFilesService } from '../../src/modules/inquiries/inquiry-files.s
 import { InquiryInviteesService } from '../../src/modules/inquiries/inquiry-invitees.service';
 import { InquiryLinesService } from '../../src/modules/inquiries/inquiry-lines.service';
 import { InquiryWorkflowService } from '../../src/modules/inquiries/inquiry-workflow.service';
+import { RoundAwardService } from '../../src/modules/inquiries/round-award.service';
 import { RoundDeadlineJob } from '../../src/modules/inquiries/round-deadline.job';
 import { RoundWorkflowService } from '../../src/modules/inquiries/round-workflow.service';
 import { NegotiationsService } from '../../src/modules/negotiations/negotiations.service';
@@ -570,6 +572,184 @@ export async function seedD4(ctx: DemoContext): Promise<string> {
         content: '铝价仍在高位，最低可做到如下价格；第 1 款数量 12000 件可以接受。',
       }),
     ),
+  );
+  return inquiry.formalNo!;
+}
+
+/** D5 两行防水连接器报价（PPL-PERIPH 的必填列：含税单价、税率、交期、材质） */
+function d5Values(
+  prices: [string, string],
+  leadTimeDays: number,
+  brand: string,
+  paymentTerms: string,
+): Record<string, unknown>[] {
+  const common = {
+    brand,
+    material: 'PA66 + 硅胶密封圈',
+    tax_rate: '13',
+    lead_time_days: leadTimeDays,
+    moq: 5000,
+    price_valid_until: '2027-06-30',
+    payment_terms: paymentTerms,
+    sample_lead_days: 5,
+    warranty_months: 24,
+    rohs: true,
+    reach: true,
+    packing_method: 'BAG',
+    trade_term: 'DAP',
+  };
+  return [
+    { ...common, model: 'WC-2P-10A', unit_price_incl_tax: prices[0], pcs_per_carton: 1000 },
+    { ...common, model: 'WC-3P-10A', unit_price_incl_tax: prices[1], pcs_per_carton: 800 },
+  ];
+}
+
+/**
+ * D5：PJ-2026-004 / 防水连接器询价，评标完成。十天前建单审批、九天前发布给 SUP10004、SUP10003、SUP10006，
+ * SUP10004、SUP10003 报价，SUP10006 拒绝（价格）；五天前截止、四天前开标，入围 SUP10004、SUP10003；
+ * 与 SUP10004 议价：目标价 → 接受（成交生成新版本）；两天前采购主管定标 SUP10004，自动生成合同草稿
+ */
+export async function seedD5(ctx: DemoContext): Promise<string> {
+  const { pd, buyer, manager } = ctx.users;
+  const deadline = inAppTz(new Date())
+    .subtract(5, 'day')
+    .hour(18)
+    .minute(0)
+    .second(0)
+    .millisecond(0)
+    .toDate();
+  const inquiry = await atOffset(ctx, -10 * DAY_MS, async () => {
+    const created = await ctx.app.get(InquiriesService).create(
+      buyer,
+      createInquirySchema.parse({
+        projectNo: 'PJ-2026-004',
+        title: '防水连接器询价',
+        materialCategoryId: ctx.category['PER-CONN'],
+        currency: 'CNY',
+        description: '户外投光灯与线条灯配套，IP68，需提供盐雾与浸水测试报告。',
+        ownerId: buyer.id,
+        pdUserId: pd.id,
+      }),
+    );
+    const lines = ctx.app.get(InquiryLinesService);
+    await lines.createFromMaterials(
+      buyer,
+      created.id,
+      1,
+      linesFromMaterialsSchema.parse({
+        items: [{ materialId: ctx.material['MAT-000008'], quantity: '30000' }],
+      }),
+    );
+    await lines.create(
+      buyer,
+      created.id,
+      1,
+      createLineSchema.parse({
+        source: 'MANUAL',
+        nameZh: '防水连接器 3P',
+        nameEn: 'Waterproof Connector 3P',
+        spec: 'IP68 / 3PIN / 10A',
+        unitCode: 'PCS',
+        categoryId: ctx.category['PER-CONN'],
+        quantity: '10000',
+      }),
+    );
+    const workflow = ctx.app.get(InquiryWorkflowService);
+    await workflow.submit(buyer, created.id);
+    return workflow.approve(manager, created.id, approveInquirySchema.parse({}));
+  });
+
+  const suppliers = await ctx.prisma.supplier.findMany({
+    where: { code: { in: ['SUP10004', 'SUP10003', 'SUP10006'] } },
+    select: { id: true },
+  });
+  await atOffset(ctx, -9 * DAY_MS, async () => {
+    await ctx.app
+      .get(InquiryInviteesService)
+      .replace(buyer, inquiry.id, updateInviteesSchema.parse({ supplierIds: suppliers.map((s) => s.id) }));
+    await ctx.app
+      .get(RoundWorkflowService)
+      .publish(buyer, inquiry.id, 1, publishRoundSchema.parse({ deadline: deadline.toISOString() }));
+  });
+
+  const quotes = await ctx.prisma.quote.findMany({
+    where: { round: { inquiryId: inquiry.id } },
+    select: { id: true, supplier: { select: { code: true } } },
+  });
+  const quoteOf = (code: string) => quotes.find((q) => q.supplier.code === code)!.id;
+  const lines = await ctx.prisma.inquiryLine.findMany({
+    where: { round: { inquiryId: inquiry.id } },
+    orderBy: { lineNo: 'asc' },
+    select: { id: true },
+  });
+  const submission = ctx.app.get(QuoteSubmissionService);
+  const form = (values: Record<string, unknown>[], extra: Record<string, string> = {}) =>
+    quoteFormSchema.parse({ lines: { [lines[0].id]: values[0], [lines[1].id]: values[1] }, ...extra });
+
+  const jinggong = await supplierActor(ctx, 'SUP10004');
+  const xinneng = await supplierActor(ctx, 'SUP10003');
+  const brightSource = await supplierActor(ctx, 'SUP10006');
+  await atOffset(ctx, -8 * DAY_MS, () =>
+    submission.submit(
+      jinggong,
+      quoteOf('SUP10004'),
+      form(d5Values(['1.85', '2.60'], 20, '精工', 'NET30'), {
+        remark: '含税含运费，送货到深圳宝安；可提供 IP68 浸水测试报告。',
+        changeNote: '首次报价',
+      }),
+    ),
+  );
+  await atOffset(ctx, -8 * DAY_MS + 4 * HOUR_MS, () =>
+    submission.submit(xinneng, quoteOf('SUP10003'), form(d5Values(['1.95', '2.45'], 25, '新能', 'NET60'))),
+  );
+  await atOffset(ctx, -7 * DAY_MS, () =>
+    submission.decline(brightSource, quoteOf('SUP10006'), {
+      reasonCode: 'PRICE',
+      reason: 'Our connector line is focused on export models; we cannot meet the target price range.',
+    }),
+  );
+
+  // 截止任务关闭（截止在五天前 18:00），四天前开标、入围
+  await atOffset(ctx, deadline.getTime() - Date.now() + 60_000, () => ctx.app.get(RoundDeadlineJob).run());
+  await atOffset(ctx, -4 * DAY_MS, () => ctx.app.get(RoundWorkflowService).open(manager, inquiry.id, 1));
+  await atOffset(ctx, -4 * DAY_MS + HOUR_MS, () =>
+    ctx.app.get(RoundShortlistService).save(buyer, inquiry.id, 1, [quoteOf('SUP10004'), quoteOf('SUP10003')]),
+  );
+
+  // 与 SUP10004 议价：目标价 → 接受（成交生成第 2 版）
+  const negotiations = ctx.app.get(NegotiationsService);
+  const offered = await atOffset(ctx, -3 * DAY_MS, () =>
+    negotiations.offer(
+      buyer,
+      quoteOf('SUP10004'),
+      negotiationOfferSchema.parse({
+        lines: [{ lineId: lines[0].id, unitPriceInclTax: '1.75' }],
+        content: '2P 款年用量 30000 件，希望单价降到 1.75，其余条件不变。',
+      }),
+    ),
+  );
+  await atOffset(ctx, -3 * DAY_MS + 5 * HOUR_MS, () =>
+    negotiations.respond(
+      jinggong,
+      quoteOf('SUP10004'),
+      negotiationRespondSchema.parse({
+        type: 'ACCEPT',
+        replyToId: offered.messages.at(-1)!.id,
+        content: '同意目标价，交期 20 天不变。',
+      }),
+    ),
+  );
+
+  // 两天前定标：SUP10004 中标、SUP10003 未中标，生成合同草稿，发中标与结果通知
+  await atOffset(ctx, -2 * DAY_MS, () =>
+    ctx.app
+      .get(RoundAwardService)
+      .award(
+        manager,
+        inquiry.id,
+        1,
+        awardRoundSchema.parse({ quoteId: quoteOf('SUP10004'), comment: '议价后综合价格最低，交期最短。' }),
+      ),
   );
   return inquiry.formalNo!;
 }
