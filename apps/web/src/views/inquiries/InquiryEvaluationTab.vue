@@ -20,14 +20,16 @@ import { useDictStore } from '@/stores/dict';
 import { downloadFile } from '@/utils/download';
 import { formatDateTime, formatMoney, pickName } from '@/utils/format';
 import { columnLabel } from '@/utils/ppl';
+import AwardDialog from './AwardDialog.vue';
 
 /**
  * "比价评标"页签（M11 §5，参考 PPT #7、#8）：汇总表（每家一行，入围勾选最多 2 家、合计最低高亮、导出 Excel）→
  * 询价行切换 → 明细矩阵（行是 inMatrix 字段、列是各家当前版本；含税单价最低高亮，与上一版本相比变化的单元格高亮、
- * 悬停看原值；"只看差异"隐藏各家取值相同的字段）。没有 quote.amount 时金额显示 🔒、不标最低价
+ * 悬停看原值；"只看差异"隐藏各家取值相同的字段）。没有 quote.amount 时金额显示 🔒、不标最低价。
+ * M12：评标中时工具栏有"定标"按钮（inquiry:award），定标后把最新详情交给详情页刷新
  */
 const props = defineProps<{ inquiry: InquiryDetailDto; refreshKey?: number }>();
-const emit = defineEmits<{ shortlisted: [] }>();
+const emit = defineEmits<{ shortlisted: []; awarded: [InquiryDetailDto] }>();
 
 const { t, locale } = useI18n();
 const dict = useDictStore();
@@ -37,11 +39,13 @@ const loading = ref(false);
 const sealed = ref(false);
 const saving = ref(false);
 const exporting = ref(false);
+const awardVisible = ref(false);
 const lineId = ref('');
 const onlyDiff = ref(false);
 
 const UNIT_PRICE_KEY = 'unit_price_incl_tax';
 const canExport = computed(() => props.inquiry.allowedActions.includes('exportMatrix'));
+const canAward = computed(() => props.inquiry.allowedActions.includes('award'));
 const opened = computed(() => matrix.value?.roundStatus !== 'WAITING_QUOTES');
 const quoted = computed(() => matrix.value?.suppliers.filter((s) => s.quoted) ?? []);
 const shortlistCount = computed(() => matrix.value?.suppliers.filter((s) => s.shortlisted).length ?? 0);
@@ -128,6 +132,12 @@ async function exportMatrix(): Promise<void> {
   }
 }
 
+/** 定标后轮次评标完成：矩阵里的状态变成已中标 / 未中标、不能再入围 */
+async function onAwarded(updated: InquiryDetailDto): Promise<void> {
+  emit('awarded', updated);
+  await load();
+}
+
 async function load(): Promise<void> {
   loading.value = true;
   try {
@@ -164,6 +174,9 @@ watch(() => [props.inquiry.id, props.inquiry.currentRoundNo, props.refreshKey], 
         <span class="spacer" />
         <el-button v-if="canExport" icon="Download" :loading="exporting" @click="exportMatrix">
           {{ t('inquiries.evaluation.export') }}
+        </el-button>
+        <el-button v-if="canAward" type="primary" icon="Trophy" @click="awardVisible = true">
+          {{ t('inquiries.award.button') }}
         </el-button>
       </div>
       <!-- 列宽合计约 1080px（中英文都放得下）：1440 宽时页签区可用 1115px，不横向滚动；以后加列要重新核对 -->
@@ -382,6 +395,12 @@ watch(() => [props.inquiry.id, props.inquiry.currentRoundNo, props.refreshKey], 
           </template>
         </el-table-column>
       </el-table>
+      <AwardDialog
+        v-model="awardVisible"
+        :inquiry="inquiry"
+        :suppliers="matrix.suppliers"
+        @awarded="onAwarded"
+      />
     </template>
   </div>
 </template>

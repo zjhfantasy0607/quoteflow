@@ -340,6 +340,7 @@ export default {
       quote_decline: '拒绝报价',
       quote_importExcel: '导入 Excel 报价草稿',
       inquiry_shortlist: '调整入围名单',
+      inquiry_award: '定标',
       negotiation_offer: '议价：发目标价',
       negotiation_accept: '议价：成交',
       negotiation_reject: '议价：拒绝目标价',

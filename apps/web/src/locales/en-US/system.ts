@@ -364,6 +364,7 @@ const system: LocaleMessages['system'] = {
       quote_decline: 'Decline quotation',
       quote_importExcel: 'Import quotation draft from Excel',
       inquiry_shortlist: 'Update shortlist',
+      inquiry_award: 'Award',
       negotiation_offer: 'Negotiation: target prices',
       negotiation_accept: 'Negotiation: agreed',
       negotiation_reject: 'Negotiation: rejected',

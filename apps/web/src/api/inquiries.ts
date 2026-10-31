@@ -1,5 +1,6 @@
 import type {
   AttachInquiryFileInput,
+  AwardRoundInput,
   AuditLogDto,
   CopyLineFilesInput,
   CreateInquiryInput,
@@ -118,6 +119,9 @@ export const inquiriesApi = {
   /** 整份替换入围名单，返回调整后的矩阵 */
   shortlist: (id: string, roundNo: number, quoteIds: string[]) =>
     put<RoundMatrixDto>(`${roundPath(id, roundNo)}/shortlist`, { quoteIds }),
+  /** 定标（M12，需要 inquiry:award），返回最新详情（含定标结果与合同草稿） */
+  award: (id: string, roundNo: number, body: AwardRoundInput) =>
+    post<InquiryDetailDto>(`${roundPath(id, roundNo)}/award`, body),
 
   /** 议价（M11，需要 inquiry:evaluate）：每个动作返回最新的议价线程 */
   negotiation: (quoteId: string) => get<NegotiationThreadDto>(`/quotes/${quoteId}/negotiation`),

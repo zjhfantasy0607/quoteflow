@@ -246,6 +246,19 @@ describe('PortalQuoteDetailPage', () => {
     w.unmount();
   });
 
+  it('M12 §5 定标后：中标显示"恭喜中标"，未中标显示"本次未中标，感谢参与"', async () => {
+    const evaluated = { ...detail().round, status: 'EVALUATED' as const };
+    let w = await mountPage(detail({ status: 'WON', round: evaluated }));
+    expect(w.find('.el-alert').text()).toContain('恭喜中标');
+    expect(w.text()).toContain('已中标');
+    w.unmount();
+
+    w = await mountPage(detail({ status: 'LOST', round: evaluated }));
+    expect(w.find('.el-alert').text()).toContain('本次未中标，感谢贵司的参与');
+    expect(w.text()).toContain('未中标');
+    w.unmount();
+  });
+
   it('别家的报价单（404）显示找不到', async () => {
     const response = { status: 404, data: { code: 'NOT_FOUND', message: 'NOT_FOUND' } } as AxiosResponse;
     mocks.quote.mockRejectedValue(

@@ -48,6 +48,9 @@ const portal: LocaleMessages['portal'] = {
     voidBanner: 'This quotation is void (round {no}) and is read-only',
     cancelledBanner: 'The RFQ was cancelled at {time}. Reason: {reason}',
     closedBanner: 'The deadline has passed. Quotations can no longer be submitted or changed.',
+    wonBanner:
+      'Congratulations, your quotation has been awarded! Our purchasing team will contact you shortly about the contract.',
+    lostBanner: 'Your quotation was not selected this time. Thank you for your participation.',
     change: 'Changes in round {no}',
     changeReason: 'Reason',
     changeSummary: 'Main changes',

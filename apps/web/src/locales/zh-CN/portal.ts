@@ -45,6 +45,8 @@ export default {
     voidBanner: '本报价单已作废（第 {no} 轮），只能查看',
     cancelledBanner: '询价已于 {time} 取消，原因：{reason}',
     closedBanner: '已过截止时间，不能再提交或修改报价',
+    wonBanner: '恭喜中标！我们的采购人员将尽快与贵司联系合同签订等后续事宜。',
+    lostBanner: '本次未中标，感谢贵司的参与。',
     change: '第 {no} 轮变更说明',
     changeReason: '变更原因',
     changeSummary: '主要变更内容',

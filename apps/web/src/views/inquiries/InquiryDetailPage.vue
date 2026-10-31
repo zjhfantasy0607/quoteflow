@@ -33,7 +33,9 @@ import RoundProgress from './RoundProgress.vue';
 /**
  * 询价单详情（M06 §5、M07 §5、M10 §5、M11 §5）：表头卡片 + 轮次进度条（发布后）+ 按 allowedActions 显示的操作 + 页签（明细与附件 /
  * 邀请供应商 / 供应商响应（发布后） / 比价评标（开标后） / 议价（有入围时） / 审批记录 / 下载日志（M08） / 操作日志）；
- * 待审批时页面底部是"审批操作"区（参考 PPT #22）。?tab= 指定打开的页签（从报价详情返回时回到"供应商响应"，议价邮件链接到"议价"）
+ * 待审批时页面底部是"审批操作"区（参考 PPT #22）。?tab= 指定打开的页签（从报价详情返回时回到"供应商响应"，议价邮件链接到"议价"）。
+ * M12：定标在"比价评标"页签；评标完成后顶部是完成横幅（中标供应商、定标人与时间、定标说明、合同草稿号，参考 PPT #11），
+ * 整单只读（按钮由 allowedActions 决定）
  */
 const { t, locale } = useI18n();
 const route = useRoute();
@@ -317,6 +319,33 @@ watch(
         class="banner"
       />
       <el-alert
+        v-else-if="inquiry.award"
+        type="success"
+        :title="
+          t('inquiries.detail.completedBanner', {
+            supplier: `${inquiry.award.supplier.code} ${pickName(inquiry.award.supplier, locale)}`,
+          })
+        "
+        show-icon
+        :closable="false"
+        class="banner completed-banner"
+      >
+        <div>
+          {{
+            t('inquiries.detail.completedMeta', {
+              name: inquiry.award.awardedBy?.name ?? '—',
+              time: `${formatDateTime(inquiry.award.awardedAt)} ${t('common.tz')}`,
+            })
+          }}
+        </div>
+        <div v-if="inquiry.award.comment" class="pre">
+          {{ t('inquiries.detail.awardComment', { comment: inquiry.award.comment }) }}
+        </div>
+        <div v-if="inquiry.award.contract">
+          {{ t('inquiries.detail.contractDraft', { contractNo: inquiry.award.contract.contractNo }) }}
+        </div>
+      </el-alert>
+      <el-alert
         v-else-if="inquiry.docStatus === 'DRAFT' && inquiry.lastRejectComment"
         type="warning"
         :title="t('inquiries.detail.rejectedBanner', { comment: inquiry.lastRejectComment })"
@@ -424,6 +453,7 @@ watch(
               :inquiry="inquiry"
               :refresh-key="matrixRefresh"
               @shortlisted="reloadInquiry"
+              @awarded="afterAction"
             />
           </el-tab-pane>
           <el-tab-pane
@@ -484,6 +514,9 @@ watch(
 .banner,
 .section {
   margin-bottom: 16px;
+}
+.completed-banner :deep(.el-alert__description) {
+  line-height: 1.7;
 }
 .section-title {
   font-weight: 600;

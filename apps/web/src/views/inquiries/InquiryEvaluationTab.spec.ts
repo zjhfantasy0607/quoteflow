@@ -10,14 +10,21 @@ import ElementPlus from 'element-plus';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyLocale, i18n } from '@/i18n';
+import AwardDialog from './AwardDialog.vue';
 import InquiryEvaluationTab from './InquiryEvaluationTab.vue';
 
-const mocks = vi.hoisted(() => ({ matrix: vi.fn(), shortlist: vi.fn(), download: vi.fn(async () => true) }));
+const mocks = vi.hoisted(() => ({
+  matrix: vi.fn(),
+  shortlist: vi.fn(),
+  award: vi.fn(),
+  download: vi.fn(async () => true),
+}));
 
 vi.mock('@/api/inquiries', () => ({
   inquiriesApi: {
     matrix: mocks.matrix,
     shortlist: mocks.shortlist,
+    award: mocks.award,
     matrixExportUrl: (id: string, roundNo: number) => `/inquiries/${id}/rounds/${roundNo}/matrix/export`,
   },
 }));
@@ -261,6 +268,27 @@ describe('InquiryEvaluationTab', () => {
     await flushPromises();
     // 第 1 行两家交期都是 25，被隐藏
     expect(bodyRows(w, 1).map((r) => r.find('td').text())).toEqual(['unit_price_incl_tax', 'brand']);
+    w.unmount();
+  });
+
+  it('R12-1 有 award 时工具栏显示"定标"，打开定标对话框；定标后把详情交给页面并重新加载矩阵', async () => {
+    const without = await mountTab(matrix());
+    expect(button(without, '定标')).toBeUndefined();
+    without.unmount();
+    mocks.matrix.mockClear();
+
+    const w = await mountTab(matrix(), ['evaluate', 'shortlist', 'exportMatrix', 'award']);
+    await button(w, '定标')!.trigger('click');
+    await flushPromises();
+    const dialog = w.findComponent(AwardDialog);
+    expect(dialog.props('modelValue')).toBe(true);
+    expect(dialog.props('suppliers')).toHaveLength(4);
+    const updated = inquiry(['evaluate', 'exportMatrix']);
+    mocks.matrix.mockResolvedValue(matrix({ roundStatus: 'EVALUATED', canShortlist: false }));
+    dialog.vm.$emit('awarded', updated);
+    await flushPromises();
+    expect(w.emitted('awarded')).toEqual([[updated]]);
+    expect(mocks.matrix).toHaveBeenCalledTimes(2);
     w.unmount();
   });
 

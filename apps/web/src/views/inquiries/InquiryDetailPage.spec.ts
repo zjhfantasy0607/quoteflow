@@ -205,6 +205,51 @@ describe('InquiryDetailPage', () => {
     w.unmount();
   });
 
+  it('R12-4 评标完成：顶部横幅显示中标供应商、定标人与时间、定标说明和合同草稿号，只读', async () => {
+    const evaluatedRound = {
+      id: 'r1',
+      roundNo: 1,
+      status: 'EVALUATED',
+      deadline: '2026-11-05T02:00:00.000Z',
+      publishedAt: '2026-11-02T01:00:00.000Z',
+      quotesClosedAt: '2026-11-05T02:00:00.000Z',
+      closedEarly: false,
+      openedAt: '2026-11-05T03:00:00.000Z',
+      evaluatedAt: '2026-11-06T02:00:00.000Z',
+      lineCount: 1,
+      shortlistCount: 0,
+    };
+    const w = await mountPage(
+      mocks.detail({
+        docStatus: 'APPROVED',
+        displayStatus: 'EVALUATED',
+        formalNo: 'RFQ-202611-0001',
+        currentRoundStatus: 'EVALUATED',
+        currentDeadline: evaluatedRound.deadline,
+        completedAt: evaluatedRound.evaluatedAt,
+        currentRound: evaluatedRound,
+        award: {
+          roundNo: 1,
+          quoteId: 'quote-a',
+          supplier: { id: 's1', code: 'SUP10004', nameZh: '浙江精工制造有限公司', nameEn: null },
+          awardedAt: evaluatedRound.evaluatedAt,
+          awardedBy: { id: 'u1', name: '张伟' },
+          comment: '议价后综合价格最低',
+          contract: { id: 'ct1', contractNo: 'CT-202611-0001' },
+        },
+        allowedActions: [],
+      }) as unknown as InquiryDetailDto,
+    );
+    const banner = w.find('.completed-banner');
+    expect(banner.text()).toContain('评标已完成，中标供应商：SUP10004 浙江精工制造有限公司');
+    expect(banner.text()).toContain('张伟 于 2026-11-06 10:00 北京时间 定标');
+    expect(banner.text()).toContain('定标说明：议价后综合价格最低');
+    expect(banner.text()).toContain('已自动生成合同草稿 CT-202611-0001');
+    expect(w.find('.round-progress').text()).toContain('2026-11-06 10:00');
+    expect(buttonTexts(w)).toEqual(['返回']);
+    w.unmount();
+  });
+
   it('已取消显示取消时间和原因', async () => {
     const w = await mountPage(
       mocks.detail({

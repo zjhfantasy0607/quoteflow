@@ -22,7 +22,7 @@ import PortalQuoteVersions from './PortalQuoteVersions.vue';
 /**
  * 门户报价详情（M08 §5，参考 PPT #5）：询价信息 + 变更说明（第 2 轮起）+ 询价明细 + 规格附件（在线预览 / 下载，都会被记录），
  * 下面是议价（M11：采购方发过议价才有）、我的报价（M09：在线填写或锁定 Excel、提交、拒绝）和历史版本。
- * 作废的旧轮次、取消的询价只读（R08-6）
+ * 作废的旧轮次、取消的询价只读（R08-6）；定标后中标显示"恭喜中标"、未中标显示"本次未中标，感谢参与"（M12 §5）
  */
 const { t, locale } = useI18n();
 const route = useRoute();
@@ -134,6 +134,22 @@ watch(
         v-else-if="detail.status === 'VOID'"
         type="warning"
         :title="t('portal.quote.voidBanner', { no: detail.round.roundNo })"
+        show-icon
+        :closable="false"
+        class="banner"
+      />
+      <el-alert
+        v-else-if="detail.status === 'WON'"
+        type="success"
+        :title="t('portal.quote.wonBanner')"
+        show-icon
+        :closable="false"
+        class="banner"
+      />
+      <el-alert
+        v-else-if="detail.status === 'LOST'"
+        type="info"
+        :title="t('portal.quote.lostBanner')"
         show-icon
         :closable="false"
         class="banner"
