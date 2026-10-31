@@ -49,7 +49,8 @@ const system: LocaleMessages['system'] = {
       ALL: 'All RFQs',
     },
     fieldsHint: 'Fields that are not checked are shown as "Restricted" to users of this role',
-    supplierFixed: 'The supplier role is fixed: portal endpoints are granted by user type and need no configuration.',
+    supplierFixed:
+      'The supplier role is fixed: portal endpoints are granted by user type and need no configuration.',
     deleteConfirm: 'Delete role "{name}"?',
     deleted: 'Deleted',
     saved: 'Saved. Permissions take effect immediately for the affected users.',
@@ -65,7 +66,8 @@ const system: LocaleMessages['system'] = {
     system: 'System',
     itemCount: '{count} items',
     typeFields: { code: 'Code', nameZh: 'Chinese name', nameEn: 'English name' },
-    typeCodeRule: 'Starts with a lowercase letter; 2–50 lowercase letters, digits or underscores; cannot be changed later',
+    typeCodeRule:
+      'Starts with a lowercase letter; 2–50 lowercase letters, digits or underscores; cannot be changed later',
     createItem: 'New item',
     editItem: 'Edit item',
     itemFields: {
@@ -77,7 +79,8 @@ const system: LocaleMessages['system'] = {
       remark: 'Remark',
     },
     itemCodeRule: '1–50 letters, digits, dots, underscores or hyphens; cannot be changed later',
-    systemTypeHint: 'System dictionary: it cannot be deleted, and its items can only be disabled, not deleted',
+    systemTypeHint:
+      'System dictionary: it cannot be deleted, and its items can only be disabled, not deleted',
     enable: 'Enable',
     disable: 'Disable',
     deleteTypeConfirm: 'Delete the dictionary "{name}" and all of its items?',
@@ -109,7 +112,12 @@ const system: LocaleMessages['system'] = {
       security_sessionHours: 'Session lifetime',
     },
     fields: {
-      company_profile: { nameZh: 'Name (Chinese)', nameEn: 'Name (English)', address: 'Address', phone: 'Phone' },
+      company_profile: {
+        nameZh: 'Name (Chinese)',
+        nameEn: 'Name (English)',
+        address: 'Address',
+        phone: 'Phone',
+      },
       points_rules: {
         quoteOnTime: 'Quoted on time',
         fastResponse: 'Fast response',
@@ -137,7 +145,13 @@ const system: LocaleMessages['system'] = {
     upload: 'Upload new version',
     versions: 'Template set versions',
     noData: 'No template set yet',
-    fields: { version: 'Version', label: 'Label', status: 'Status', columns: 'Columns', createdAt: 'Created at' },
+    fields: {
+      version: 'Version',
+      label: 'Label',
+      status: 'Status',
+      columns: 'Columns',
+      createdAt: 'Created at',
+    },
     versionNo: 'v{version}',
     active: 'Active',
     inactive: 'Inactive',
@@ -175,7 +189,12 @@ const system: LocaleMessages['system'] = {
       multiEnum: 'Multiple choice',
     },
     sources: { prefill: 'Prefilled', supplier: 'Supplier', formula: 'Formula' },
-    flags: { sensitive: 'Sensitive amount', inMatrix: 'Comparison', keyField: 'List', logistics: 'Logistics' },
+    flags: {
+      sensitive: 'Sensitive amount',
+      inMatrix: 'Comparison',
+      keyField: 'List',
+      logistics: 'Logistics',
+    },
     rules: {
       precision: '{n} decimal places',
       maxLength: 'Up to {n} characters',
@@ -344,6 +363,12 @@ const system: LocaleMessages['system'] = {
       quote_submit: 'Submit quotation',
       quote_decline: 'Decline quotation',
       quote_importExcel: 'Import quotation draft from Excel',
+      inquiry_shortlist: 'Update shortlist',
+      negotiation_offer: 'Negotiation: target prices',
+      negotiation_accept: 'Negotiation: agreed',
+      negotiation_reject: 'Negotiation: rejected',
+      negotiation_counter: 'Negotiation: counter-offer',
+      negotiation_close: 'Negotiation: closed',
     },
   },
 };

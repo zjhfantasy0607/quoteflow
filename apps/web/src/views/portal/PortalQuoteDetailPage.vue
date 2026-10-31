@@ -15,12 +15,14 @@ import { formatFileSize } from '@/utils/files';
 import { formatDateTime, pickName } from '@/utils/format';
 import { remainingText } from '@/utils/inquiries';
 import { portalQuoteStatus } from '@/utils/portal';
+import PortalNegotiation from './PortalNegotiation.vue';
 import PortalQuoteForm from './PortalQuoteForm.vue';
 import PortalQuoteVersions from './PortalQuoteVersions.vue';
 
 /**
  * 门户报价详情（M08 §5，参考 PPT #5）：询价信息 + 变更说明（第 2 轮起）+ 询价明细 + 规格附件（在线预览 / 下载，都会被记录），
- * 下面是我的报价（M09：在线填写或锁定 Excel、提交、拒绝）和历史版本。作废的旧轮次、取消的询价只读（R08-6）
+ * 下面是议价（M11：采购方发过议价才有）、我的报价（M09：在线填写或锁定 Excel、提交、拒绝）和历史版本。
+ * 作废的旧轮次、取消的询价只读（R08-6）
  */
 const { t, locale } = useI18n();
 const route = useRoute();
@@ -287,6 +289,7 @@ watch(
         </el-table>
       </el-card>
 
+      <PortalNegotiation :detail="detail" class="section" @changed="load" />
       <PortalQuoteForm :detail="detail" class="section" @changed="detail = $event" />
       <PortalQuoteVersions :detail="detail" class="section" />
 

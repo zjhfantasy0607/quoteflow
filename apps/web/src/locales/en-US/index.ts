@@ -8,6 +8,7 @@ import file from './file';
 import inquiries from './inquiries';
 import materials from './materials';
 import nav from './nav';
+import negotiation from './negotiation';
 import portal from './portal';
 import ppl from './ppl';
 import suppliers from './suppliers';
@@ -25,6 +26,7 @@ const enUS: LocaleMessages = {
   inquiries,
   portal,
   ppl,
+  negotiation,
   file,
   excel,
   enums,

@@ -20,18 +20,20 @@ import { formatDateTime, pickName } from '@/utils/format';
 import { inquiryNo, remainingText } from '@/utils/inquiries';
 import ApprovalTimeline from './ApprovalTimeline.vue';
 import InquiryAccessLogsTab from './InquiryAccessLogsTab.vue';
+import InquiryEvaluationTab from './InquiryEvaluationTab.vue';
 import InquiryFilesSection from './InquiryFilesSection.vue';
 import InquiryInviteesTab from './InquiryInviteesTab.vue';
 import InquiryLinesTable from './InquiryLinesTable.vue';
 import InquiryLogs from './InquiryLogs.vue';
+import InquiryNegotiationTab from './InquiryNegotiationTab.vue';
 import InquiryResponsesTab from './InquiryResponsesTab.vue';
 import PublishDialog from './PublishDialog.vue';
 import RoundProgress from './RoundProgress.vue';
 
 /**
- * 询价单详情（M06 §5、M07 §5、M10 §5）：表头卡片 + 轮次进度条（发布后）+ 按 allowedActions 显示的操作 + 页签（明细与附件 /
- * 邀请供应商 / 供应商响应（发布后） / 审批记录 / 下载日志（M08） / 操作日志）；待审批时页面底部是"审批操作"区（参考 PPT #22）。
- * ?tab= 指定打开的页签（从报价详情返回时回到"供应商响应"）
+ * 询价单详情（M06 §5、M07 §5、M10 §5、M11 §5）：表头卡片 + 轮次进度条（发布后）+ 按 allowedActions 显示的操作 + 页签（明细与附件 /
+ * 邀请供应商 / 供应商响应（发布后） / 比价评标（开标后） / 议价（有入围时） / 审批记录 / 下载日志（M08） / 操作日志）；
+ * 待审批时页面底部是"审批操作"区（参考 PPT #22）。?tab= 指定打开的页签（从报价详情返回时回到"供应商响应"，议价邮件链接到"议价"）
  */
 const { t, locale } = useI18n();
 const route = useRoute();
@@ -52,16 +54,25 @@ const approvalPanel = ref<HTMLElement | null>(null);
 const publishVisible = ref(false);
 /** "邀请供应商"页签里有没保存的修改 */
 const inviteesDirty = ref(false);
+/** 议价有变化时加 1，"比价评标"页签据此重新加载矩阵 */
+const matrixRefresh = ref(0);
 
 const can = (action: InquiryAction) => inquiry.value?.allowedActions.includes(action) ?? false;
 const canReview = computed(() => can('approve') || can('reject'));
 /** 当前轮次已发布（有供应商参与） */
 const published = computed(() => !!inquiry.value?.currentRound.publishedAt);
+/** R11-1：开标后才有比价；有入围供应商时才有议价页签 */
+const canEvaluate = computed(() => can('evaluate'));
+const hasShortlist = computed(
+  () => canEvaluate.value && (inquiry.value?.currentRound.shortlistCount ?? 0) > 0,
+);
 /** 能打开的页签（?tab= 指定的不在里面时打开明细） */
 const tabs = computed(() => [
   'lines',
   'invitees',
   ...(published.value ? ['responses'] : []),
+  ...(canEvaluate.value ? ['evaluation'] : []),
+  ...(hasShortlist.value ? ['negotiation'] : []),
   'approvals',
   ...(can('viewAccessLog') ? ['accessLogs'] : []),
   'logs',
@@ -123,6 +134,11 @@ async function afterAction(updated: InquiryDetailDto): Promise<void> {
   inquiry.value = updated;
   comment.value = '';
   await Promise.all([loadRound(), loadApprovals(), tab.value === 'logs' ? loadLogs() : Promise.resolve()]);
+}
+
+/** 入围名单变化后刷新详情（入围家数决定"议价"页签是否出现） */
+async function reloadInquiry(): Promise<void> {
+  inquiry.value = await inquiriesApi.get(id.value);
 }
 
 async function submit(): Promise<void> {
@@ -397,6 +413,26 @@ watch(
           </el-tab-pane>
           <el-tab-pane v-if="published" name="responses" :label="t('inquiries.detail.tabs.responses')" lazy>
             <InquiryResponsesTab :inquiry="inquiry" @changed="afterAction" />
+          </el-tab-pane>
+          <el-tab-pane
+            v-if="canEvaluate"
+            name="evaluation"
+            :label="t('inquiries.detail.tabs.evaluation')"
+            lazy
+          >
+            <InquiryEvaluationTab
+              :inquiry="inquiry"
+              :refresh-key="matrixRefresh"
+              @shortlisted="reloadInquiry"
+            />
+          </el-tab-pane>
+          <el-tab-pane
+            v-if="hasShortlist"
+            name="negotiation"
+            :label="t('inquiries.detail.tabs.negotiation')"
+            lazy
+          >
+            <InquiryNegotiationTab :inquiry="inquiry" @changed="matrixRefresh += 1" />
           </el-tab-pane>
           <el-tab-pane name="approvals" :label="t('inquiries.detail.tabs.approvals')">
             <ApprovalTimeline :items="approvals" />

@@ -1,5 +1,7 @@
 import type {
   DeclineQuoteInput,
+  NegotiationRespondParams,
+  NegotiationThreadDto,
   Paginated,
   PortalQuoteDetailDto,
   PortalQuoteListItemDto,
@@ -13,7 +15,7 @@ import { get, http, post, put } from './http';
 
 const quoteUrl = (id: string) => `/portal/quotes/${id}`;
 
-/** 供应商门户（M08、M09） */
+/** 供应商门户（M08、M09、M11） */
 export const portalApi = {
   quotes: (query: Partial<PortalQuoteListParams>) =>
     get<Paginated<PortalQuoteListItemDto>>('/portal/quotes', query),
@@ -39,4 +41,9 @@ export const portalApi = {
     return (await http.post<PortalQuoteDetailDto>(`${quoteUrl(id)}/excel-import`, form, { silent: true }))
       .data;
   },
+
+  /** 议价（M11）：自己报价单的议价线程，回复后返回最新的线程 */
+  negotiation: (id: string) => get<NegotiationThreadDto>(`${quoteUrl(id)}/negotiation`),
+  respondNegotiation: (id: string, body: NegotiationRespondParams) =>
+    post<NegotiationThreadDto>(`${quoteUrl(id)}/negotiation/respond`, body),
 };
