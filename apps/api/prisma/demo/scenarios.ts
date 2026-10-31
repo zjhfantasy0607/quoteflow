@@ -1,10 +1,11 @@
 // 演示场景（docs/06-种子数据.md §3）。单据一律通过 service 方法创建，状态和不变量与真实操作一致。
-// 哪个模块完成就在这里补哪个场景：M06 → D1、D2；M09 → D3；M11 → D4；M12 → D5。
+// 哪个模块完成就在这里补哪个场景：M06 → D1、D2；M09 → D3；M11 → D4；M12 → D5；M13 → D6。
 import type { INestApplicationContext } from '@nestjs/common';
 import {
   approveInquirySchema,
   attachInquiryFileSchema,
   awardRoundSchema,
+  changeRoundSchema,
   createInquirySchema,
   createLineSchema,
   linesFromMaterialsSchema,
@@ -13,6 +14,7 @@ import {
   publishRoundSchema,
   quoteFormSchema,
   updateInviteesSchema,
+  updateLineSchema,
   type InquiryFileKind,
 } from '@quoteflow/shared';
 import type { AuthUser } from '../../src/common/auth/auth-user';
@@ -26,6 +28,7 @@ import { InquiryInviteesService } from '../../src/modules/inquiries/inquiry-invi
 import { InquiryLinesService } from '../../src/modules/inquiries/inquiry-lines.service';
 import { InquiryWorkflowService } from '../../src/modules/inquiries/inquiry-workflow.service';
 import { RoundAwardService } from '../../src/modules/inquiries/round-award.service';
+import { RoundChangeService } from '../../src/modules/inquiries/round-change.service';
 import { RoundDeadlineJob } from '../../src/modules/inquiries/round-deadline.job';
 import { RoundWorkflowService } from '../../src/modules/inquiries/round-workflow.service';
 import { NegotiationsService } from '../../src/modules/negotiations/negotiations.service';
@@ -750,6 +753,213 @@ export async function seedD5(ctx: DemoContext): Promise<string> {
         1,
         awardRoundSchema.parse({ quoteId: quoteOf('SUP10004'), comment: '议价后综合价格最低，交期最短。' }),
       ),
+  );
+  return inquiry.formalNo!;
+}
+
+/** D6 两行 COB 报价（PPL-LED 的必填列：功率、色温、显色指数、光通量、含税单价、税率、交期） */
+function d6Values(
+  rows: { power: string; cct: number; flux: string; price: string }[],
+  cri: number,
+  leadTimeDays: number,
+): Record<string, unknown>[] {
+  return rows.map((r) => ({
+    power_w: r.power,
+    cct_k: r.cct,
+    cri_ra: cri,
+    luminous_flux_lm: r.flux,
+    unit_price_incl_tax: r.price,
+    tax_rate: '13',
+    lead_time_days: leadTimeDays,
+  }));
+}
+
+/**
+ * D6：PJ-2026-005 / COB 灯珠询价，第 2 轮等待报价。六天前建单审批、五天前发布第 1 轮给 SUP10001、SUP10006、SUP10002，
+ * SUP10001、SUP10006 报了价（SUP10002 未响应）；两天前 PD 发起规格变更（显色指数 Ra80 → Ra90，第 2 行功率 15W → 12W，
+ * 技术要求换成 V2），采购员确认发布第 2 轮：第 1 轮作废、从未开标所以永久密封，三家收到变更通知；一天前 SUP10001 报了第 2 轮
+ */
+export async function seedD6(ctx: DemoContext): Promise<string> {
+  const { pd, buyer, manager } = ctx.users;
+  const at18 = (days: number) =>
+    inAppTz(new Date()).add(days, 'day').hour(18).minute(0).second(0).millisecond(0).toDate();
+  const led = ctx.category['LED-COB'];
+  const inquiry = await atOffset(ctx, -6 * DAY_MS, async () => {
+    const created = await ctx.app.get(InquiriesService).create(
+      buyer,
+      createInquirySchema.parse({
+        projectNo: 'PJ-2026-005',
+        title: 'COB 灯珠询价',
+        materialCategoryId: led,
+        currency: 'CNY',
+        description: '轨道灯与筒灯用 COB 光源，需提供 LM-80 报告与色容差（≤ 3 SDCM）数据。',
+        ownerId: buyer.id,
+        pdUserId: pd.id,
+      }),
+    );
+    const lines = ctx.app.get(InquiryLinesService);
+    const rows = [
+      ['COB 灯珠（中性光）', 'COB LED (Neutral White)', 'COB / 10W / 30V / 300mA / 4000K / Ra80', '20000'],
+      ['COB 灯珠（暖白）', 'COB LED (Warm White)', 'COB / 15W / 36V / 420mA / 3000K / Ra80', '8000'],
+    ];
+    for (const [nameZh, nameEn, spec, quantity] of rows) {
+      await lines.create(
+        buyer,
+        created.id,
+        1,
+        createLineSchema.parse({
+          source: 'MANUAL',
+          nameZh,
+          nameEn,
+          spec,
+          unitCode: 'PCS',
+          categoryId: led,
+          quantity,
+        }),
+      );
+    }
+    const spec = await upload(
+      ctx,
+      buyer,
+      'SPEC_DOC',
+      'COB 灯珠技术要求 V1.pdf',
+      demoPdf(['COB LED Requirements V1 (demo)', 'Project: PJ-2026-005', 'CRI: Ra80', 'SDCM <= 3']),
+    );
+    await ctx.app
+      .get(InquiryFilesService)
+      .attach(
+        buyer,
+        created.id,
+        1,
+        attachInquiryFileSchema.parse({ fileId: spec, kind: 'SPEC_DOC', lineId: null }),
+      );
+    const workflow = ctx.app.get(InquiryWorkflowService);
+    await workflow.submit(buyer, created.id);
+    return workflow.approve(manager, created.id, approveInquirySchema.parse({}));
+  });
+
+  const suppliers = await ctx.prisma.supplier.findMany({
+    where: { code: { in: ['SUP10001', 'SUP10006', 'SUP10002'] } },
+    select: { id: true },
+  });
+  await atOffset(ctx, -5 * DAY_MS, async () => {
+    await ctx.app
+      .get(InquiryInviteesService)
+      .replace(buyer, inquiry.id, updateInviteesSchema.parse({ supplierIds: suppliers.map((s) => s.id) }));
+    await ctx.app
+      .get(RoundWorkflowService)
+      .publish(buyer, inquiry.id, 1, publishRoundSchema.parse({ deadline: at18(2).toISOString() }));
+  });
+
+  const quoteIdsOf = async (roundNo: number) => {
+    const quotes = await ctx.prisma.quote.findMany({
+      where: { round: { inquiryId: inquiry.id, roundNo } },
+      select: { id: true, supplier: { select: { code: true } } },
+    });
+    return (code: string) => quotes.find((q) => q.supplier.code === code)!.id;
+  };
+  const lineIdsOf = async (roundNo: number) =>
+    (
+      await ctx.prisma.inquiryLine.findMany({
+        where: { round: { inquiryId: inquiry.id, roundNo } },
+        orderBy: { lineNo: 'asc' },
+        select: { id: true },
+      })
+    ).map((l) => l.id);
+  const submission = ctx.app.get(QuoteSubmissionService);
+  const form = (lineIds: string[], values: Record<string, unknown>[], extra: Record<string, string> = {}) =>
+    quoteFormSchema.parse({ lines: Object.fromEntries(lineIds.map((id, i) => [id, values[i]])), ...extra });
+
+  const huaxin = await supplierActor(ctx, 'SUP10001');
+  const brightSource = await supplierActor(ctx, 'SUP10006');
+  const round1 = await quoteIdsOf(1);
+  const lines1 = await lineIdsOf(1);
+  const ra80 = [
+    { power: '10', cct: 4000, flux: '1300', price: '6.80' },
+    { power: '15', cct: 3000, flux: '1850', price: '9.60' },
+  ];
+  await atOffset(ctx, -4 * DAY_MS, () =>
+    submission.submit(
+      huaxin,
+      round1('SUP10001'),
+      form(lines1, d6Values(ra80, 80, 20), {
+        remark: '含税含运费，送货到深圳宝安。',
+        changeNote: '首次报价',
+      }),
+    ),
+  );
+  await atOffset(ctx, -4 * DAY_MS + 6 * HOUR_MS, () =>
+    submission.submit(brightSource, round1('SUP10006'), form(lines1, d6Values(ra80, 80, 30))),
+  );
+
+  // 两天前 PD 发起规格变更：两行改为 Ra90，第 2 行功率 15W → 12W，技术要求换成 V2
+  await atOffset(ctx, -2 * DAY_MS, async () => {
+    const draft = await ctx.app.get(RoundChangeService).create(
+      pd,
+      inquiry.id,
+      changeRoundSchema.parse({
+        changeReason: '显色指数 Ra80 → Ra90',
+        changeSummary:
+          '两款 COB 的显色指数统一提高到 Ra90；第 2 行（暖白）功率由 15W 调整为 12W；技术要求更新为 V2。',
+      }),
+    );
+    const lines = ctx.app.get(InquiryLinesService);
+    const specs = ['COB / 10W / 30V / 300mA / 4000K / Ra90', 'COB / 12W / 36V / 330mA / 3000K / Ra90'];
+    for (const [i, line] of draft.lines.entries()) {
+      await lines.update(
+        pd,
+        inquiry.id,
+        2,
+        line.id,
+        updateLineSchema.parse({
+          source: 'MANUAL',
+          nameZh: line.nameZh,
+          nameEn: line.nameEn ?? undefined,
+          spec: specs[i],
+          unitCode: line.unitCode,
+          categoryId: line.category.id,
+          quantity: line.quantity,
+        }),
+      );
+    }
+    const files = ctx.app.get(InquiryFilesService);
+    await files.remove(pd, inquiry.id, 2, draft.files[0].id);
+    const v2 = await upload(
+      ctx,
+      pd,
+      'SPEC_DOC',
+      'COB 灯珠技术要求 V2.pdf',
+      demoPdf(['COB LED Requirements V2 (demo)', 'Project: PJ-2026-005', 'CRI: Ra90 (R9 > 50)', 'SDCM <= 3']),
+    );
+    await files.attach(
+      pd,
+      inquiry.id,
+      2,
+      attachInquiryFileSchema.parse({ fileId: v2, kind: 'SPEC_DOC', lineId: null }),
+    );
+  });
+  // 采购员确认发布第 2 轮：第 1 轮作废（从未开标，永久密封），三家都收到变更通知
+  await atOffset(ctx, -2 * DAY_MS + 2 * HOUR_MS, () =>
+    ctx.app
+      .get(RoundWorkflowService)
+      .publish(buyer, inquiry.id, 2, publishRoundSchema.parse({ deadline: at18(4).toISOString() })),
+  );
+
+  const round2 = await quoteIdsOf(2);
+  const lines2 = await lineIdsOf(2);
+  const ra90 = [
+    { power: '10', cct: 4000, flux: '1250', price: '7.30' },
+    { power: '12', cct: 3000, flux: '1450', price: '8.90' },
+  ];
+  await atOffset(ctx, -DAY_MS, () =>
+    submission.submit(
+      huaxin,
+      round2('SUP10001'),
+      form(lines2, d6Values(ra90, 90, 25), {
+        remark: '含税含运费，送货到深圳宝安。',
+        changeNote: '按 Ra90 规格重新报价，交期 25 天。',
+      }),
+    ),
   );
   return inquiry.formalNo!;
 }
