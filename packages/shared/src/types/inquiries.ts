@@ -53,6 +53,8 @@ export interface InquiryRoundSummaryDto {
   openedAt: string | null;
   evaluatedAt: string | null;
   lineCount: number;
+  /** 入围家数（R11-6），有入围时详情页显示"议价"页签 */
+  shortlistCount: number;
 }
 
 /** GET /api/inquiries/:id */

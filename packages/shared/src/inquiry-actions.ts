@@ -1,4 +1,5 @@
 import { InquiryDocStatus, QuoteStatus, RoundStatus } from './enums';
+import { computeSupplierNegotiationActions, type NegotiationContext } from './negotiation';
 import type { PermissionCode } from './permissions';
 
 /** 询价单、轮次详情的 allowedActions（docs/03 §6）：前端只按它显示操作按钮 */
@@ -39,11 +40,19 @@ export interface InquiryActionContext {
   docStatus: InquiryDocStatus;
   currentRoundNo: number;
   currentRoundStatus: RoundStatus;
+  /** 当前轮次的开标时间：开标后才被取消的轮次仍可查看比价（R11-1）；不传按未开标处理 */
+  currentRoundOpenedAt?: Date | string | null;
 }
 
 /** 后端传 AuthUser.permissions（Set），测试里也可以直接 new Set([...]) */
 export interface PermissionChecker {
   has(code: string): boolean;
+}
+
+/** R11-1：开过标——OPENED / EVALUATED，或开标后才被作废（与 api 的 isRoundOpened() 一致） */
+function currentRoundOpened(ctx: InquiryActionContext): boolean {
+  const round = ctx.currentRoundStatus;
+  return round === RoundStatus.OPENED || round === RoundStatus.EVALUATED || !!ctx.currentRoundOpenedAt;
 }
 
 /** 第 1 轮还没发布 */
@@ -68,7 +77,7 @@ export function isRoundEditable(
  * 轮次类动作（发布、补充邀请、催报、延期）都针对当前轮次。
  * M06 覆盖 edit、submit、approve、reject、发布前的 cancel；M07 覆盖 editInvitees、publish、lateInvite、
  * remind、extendDeadline 和发布后的 cancel；M08 覆盖 viewAccessLog；M10 覆盖 closeEarly、open；
- * 其余动作由 M11 起的模块补充。
+ * M11 覆盖 evaluate、shortlist、exportMatrix；其余动作由 M12 起的模块补充。
  */
 export function computeInquiryActions(ctx: InquiryActionContext, perms: PermissionChecker): InquiryAction[] {
   const can = (code: PermissionCode) => perms.has(code);
@@ -100,6 +109,13 @@ export function computeInquiryActions(ctx: InquiryActionContext, perms: Permissi
   if (approved && round === RoundStatus.WAITING_QUOTES && can('inquiry:open')) actions.push('closeEarly');
   // R10-3：只有报价完成的轮次能开标
   if (approved && round === RoundStatus.QUOTES_CLOSED && can('inquiry:open')) actions.push('open');
+  // R11-1：开过标就能看比价矩阵（定标后、开标后才取消的也能看）；R11-5 导出另要 inquiry:export
+  if (currentRoundOpened(ctx)) {
+    if (can('inquiry:evaluate')) actions.push('evaluate');
+    if (can('inquiry:export')) actions.push('exportMatrix');
+  }
+  // R11-6：入围只在评标中（OPENED）
+  if (approved && round === RoundStatus.OPENED && can('inquiry:evaluate')) actions.push('shortlist');
   // R06-9、R07-11：没取消、当前轮次还没评标完成都能取消
   const cancellable: InquiryDocStatus[] = [
     InquiryDocStatus.DRAFT,
@@ -120,6 +136,8 @@ export interface PortalQuoteActionContext {
   roundStatus: RoundStatus;
   /** Date 或 ISO 字符串 */
   deadline: Date | string | null;
+  /** 议价（M11）：是否入围、议价状态与最近一条消息；不传按没有议价处理 */
+  negotiation?: Pick<NegotiationContext, 'shortlisted' | 'status' | 'last'>;
 }
 
 /** 可以提交（含撤销拒绝后重新提交）、保存草稿的报价单状态（05 §4） */
@@ -144,13 +162,25 @@ export function isQuoteWindowOpen(ctx: PortalQuoteActionContext, now: Date): boo
 }
 
 /**
- * 门户报价单的填报动作（05 §4、R09-1）：报价窗口内，没有作废的报价单可以保存草稿、提交、下载与导入锁定 Excel，
- * 待报价和已提交的可以拒绝（已拒绝的可以撤销拒绝重新提交，A-23）。议价回复由 M11 补充
+ * 门户报价单的动作（05 §4、R09-1）：报价窗口内，没有作废的报价单可以保存草稿、提交、下载与导入锁定 Excel，
+ * 待报价和已提交的可以拒绝（已拒绝的可以撤销拒绝重新提交，A-23）；开标后轮到供应商回复议价时有 respondNegotiation（05 §5）
  */
 export function computePortalQuoteActions(ctx: PortalQuoteActionContext, now: Date): PortalQuoteAction[] {
-  if (!isQuoteWindowOpen(ctx, now) || !QUOTE_RESPONDING_STATUSES.includes(ctx.quoteStatus)) return [];
-  const actions: PortalQuoteAction[] = ['saveDraft', 'submit'];
-  if (QUOTE_DECLINABLE_STATUSES.includes(ctx.quoteStatus)) actions.push('decline');
-  actions.push('downloadTemplate', 'importExcel');
+  const actions: PortalQuoteAction[] = [];
+  if (isQuoteWindowOpen(ctx, now) && QUOTE_RESPONDING_STATUSES.includes(ctx.quoteStatus)) {
+    actions.push('saveDraft', 'submit');
+    if (QUOTE_DECLINABLE_STATUSES.includes(ctx.quoteStatus)) actions.push('decline');
+    actions.push('downloadTemplate', 'importExcel');
+  }
+  const negotiation = ctx.negotiation;
+  if (
+    negotiation &&
+    computeSupplierNegotiationActions({
+      ...negotiation,
+      roundStatus: ctx.roundStatus,
+      quoteStatus: ctx.quoteStatus,
+    }).length > 0
+  )
+    actions.push('respondNegotiation');
   return actions;
 }

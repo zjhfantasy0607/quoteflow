@@ -1,4 +1,10 @@
-import type { FileAccessAction, QuoteStatus, RoundStatus, SupplierLanguage } from '../enums';
+import type {
+  FileAccessAction,
+  NegotiationStatus,
+  QuoteStatus,
+  RoundStatus,
+  SupplierLanguage,
+} from '../enums';
 import type { PortalQuoteAction } from '../inquiry-actions';
 import type { PplValues } from '../ppl/values';
 import type { InquiryFileKind } from '../schemas/inquiries';
@@ -94,7 +100,9 @@ export interface PortalQuoteDetailDto {
   /** 当前版本 = 最后一次提交（R09-5）；还没提交过为 null */
   currentVersion: QuoteVersionDto | null;
   versionCount: number;
-  /** computePortalQuoteActions()：报价窗口外（已截止、作废）为空 */
+  /** 议价状态（M11）：采购方发过议价才有，门户据此显示"议价"区 */
+  negotiationStatus: NegotiationStatus | null;
+  /** computePortalQuoteActions()：报价窗口外（已截止、作废）为空，轮到回复议价时有 respondNegotiation */
   allowedActions: PortalQuoteAction[];
 }
 

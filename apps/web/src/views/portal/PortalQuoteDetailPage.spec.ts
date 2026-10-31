@@ -136,6 +136,7 @@ function detail(extra: Partial<PortalQuoteDetailDto> = {}): PortalQuoteDetailDto
     draft: null,
     currentVersion: null,
     versionCount: 0,
+    negotiationStatus: null,
     allowedActions: [],
     ...extra,
   };

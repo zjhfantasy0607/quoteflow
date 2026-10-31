@@ -18,6 +18,7 @@ function round(extra: Partial<InquiryRoundSummaryDto> = {}): InquiryRoundSummary
     openedAt: null,
     evaluatedAt: null,
     lineCount: 1,
+    shortlistCount: 0,
     ...extra,
   };
 }
