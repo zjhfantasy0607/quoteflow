@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { NegotiationMsgType, NegotiationParty, QuoteVersionSource } from '../enums';
+import { ContractStatus, NegotiationMsgType, NegotiationParty, QuoteVersionSource } from '../enums';
 import { pplColumnSchema } from '../ppl/definition';
+import { dateQueryParam, idSchema, optionalText, pageQuerySchema } from './common';
 import { INQUIRY_FILE_KINDS } from './inquiries';
 import { negotiationMessageLinesSchema } from './negotiations';
 import { quoteVersionValuesSchema } from './portal';
@@ -97,3 +98,66 @@ export const contractSnapshotSchema = z.object({
   ),
 });
 export type ContractSnapshot = z.infer<typeof contractSnapshotSchema>;
+
+// ---------- 合同管理（M14） ----------
+
+/** 合同附件的 Attachment.ownerType */
+export const CONTRACT_ATTACHMENT_OWNER = 'CONTRACT';
+/** R14-2：合同附件最多 20 个（只能是报价附件类 ATTACHMENT） */
+export const CONTRACT_ATTACHMENTS_MAX = 20;
+/** R14-6：签字扫描件只能是 PDF 或图片 */
+export const CONTRACT_SCAN_EXTS = ['pdf', 'png', 'jpg', 'jpeg', 'webp'];
+
+/** GET /api/contracts：状态页签、关键字（合同号 / 询价号 / 供应商）、供应商、创建日期区间（按 UTC+8） */
+export const contractListQuerySchema = pageQuerySchema.extend({
+  status: z.enum(ContractStatus).optional(),
+  keyword: optionalText(100),
+  supplierId: idSchema.optional(),
+  from: dateQueryParam,
+  to: dateQueryParam,
+});
+export type ContractListQuery = z.infer<typeof contractListQuerySchema>;
+export type ContractListParams = z.input<typeof contractListQuerySchema>;
+
+/** 只有日期（YYYY-MM-DD），要是真实存在的日期；空串视为没填 */
+const dateOnlySchema = z.preprocess(
+  (v) => (v === '' || v === null ? undefined : v),
+  z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine((v) => {
+      const d = new Date(`${v}T00:00:00Z`);
+      return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
+    })
+    .optional(),
+);
+
+/**
+ * PUT /api/contracts/:id（R14-2，只有草稿能改）：整体替换，没传的清空。附件是整份名单（超过 20 个由服务端返回
+ * FILE_LIMIT_EXCEEDED）；金额、币种、供应商、快照不能改
+ */
+export const updateContractSchema = z.object({
+  deliveryDate: dateOnlySchema,
+  deliveryPlace: optionalText(200),
+  paymentTerms: optionalText(200),
+  summary: optionalText(1000),
+  remark: optionalText(1000),
+  attachmentFileIds: z
+    .array(idSchema)
+    .max(100)
+    .default([])
+    .transform((ids) => [...new Set(ids)]),
+});
+export type UpdateContractInput = z.infer<typeof updateContractSchema>;
+export type UpdateContractParams = z.input<typeof updateContractSchema>;
+
+/** POST .../review、.../approve（R14-4）：驳回时意见必填（CONTRACT_COMMENT_REQUIRED，服务端校验） */
+export const contractDecisionSchema = z.object({
+  action: z.enum(['APPROVE', 'REJECT']),
+  comment: optionalText(500),
+});
+export type ContractDecisionInput = z.infer<typeof contractDecisionSchema>;
+
+/** POST .../signed-scan（R14-6）：先经 /api/files 以 ATTACHMENT 上传 */
+export const signedScanSchema = z.object({ fileId: idSchema });
+export type SignedScanInput = z.infer<typeof signedScanSchema>;
