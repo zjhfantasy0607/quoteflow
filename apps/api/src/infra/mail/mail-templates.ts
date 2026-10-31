@@ -53,8 +53,22 @@ export interface MailTemplateDataMap {
   'negotiation.agreed':
     | (SupplierNotice & { audience: 'SUPPLIER'; link: string })
     | (NegotiationBuyerNotice & { audience: 'BUYER' });
+  'contract.reviewRequest': ContractNotice;
+  'contract.approveRequest': ContractNotice;
+  'contract.result': ContractNotice & { step: 'REVIEW' | 'APPROVE'; approved: boolean; comment: string | null };
   award: SupplierNotice & { link: string };
   result: SupplierNotice & { link: string };
+}
+
+/** 合同审批邮件（M14 R14-5）：发给内部用户，只写合同号、询价号、标题、供应商，不写金额（contract.amount） */
+export interface ContractNotice {
+  name: string;
+  contractNo: string;
+  inquiry: { formalNo: string; title: string };
+  supplier: { code: string; nameZh: string; nameEn: string | null };
+  /** 提交、审核或批准的人 */
+  actorName: string;
+  link: string;
 }
 
 /** 发给询价负责人的议价通知（M11）：内部邮件也不写金额和议价内容（管理员能在邮件记录里看到正文） */
@@ -585,6 +599,101 @@ ${n.contactText}`,
   },
 };
 
+/** 合同邮件的公共部分：合同号、询价号与标题、供应商 */
+function contractLines(lang: MailLang, d: ContractNotice) {
+  const { formalNo, title } = d.inquiry;
+  if (lang === 'zh-CN') {
+    const supplier = `${d.supplier.nameZh}（${d.supplier.code}）`;
+    return {
+      html: `<ul><li>合同号：${esc(d.contractNo)}</li><li>询价单：${esc(formalNo)} ${esc(title)}</li><li>供应商：${esc(supplier)}</li></ul>`,
+      text: `合同号：${d.contractNo}\n询价单：${formalNo} ${title}\n供应商：${supplier}`,
+    };
+  }
+  const supplier = `${d.supplier.nameEn ?? d.supplier.nameZh} (${d.supplier.code})`;
+  return {
+    html: `<ul><li>Contract No.: ${esc(d.contractNo)}</li><li>RFQ: ${esc(formalNo)} ${esc(title)}</li><li>Supplier: ${esc(supplier)}</li></ul>`,
+    text: `Contract No.: ${d.contractNo}\nRFQ: ${formalNo} ${title}\nSupplier: ${supplier}`,
+  };
+}
+
+/** 合同提交审核（05 §6）：发给数据权限覆盖该合同的 contract:review 用户 */
+const contractReviewRequest: MailTemplate<MailTemplateDataMap['contract.reviewRequest']> = {
+  type: 'APPROVAL',
+  render(lang, d) {
+    const lines = contractLines(lang, d);
+    if (lang === 'zh-CN') {
+      const message = `${d.actorName} 提交了合同，请您审核：`;
+      return {
+        subject: `合同待审核：${d.contractNo} ${d.inquiry.title}`,
+        body: `<p>${esc(d.name)}，您好：</p><p>${esc(message)}</p>${lines.html}${button(d.link, '查看并审核')}`,
+        text: `${d.name}，您好：\n\n${message}\n${lines.text}\n\n查看并审核：${d.link}`,
+      };
+    }
+    const message = `${d.actorName} has submitted a contract for your review:`;
+    return {
+      subject: `Contract pending review: ${d.contractNo} ${d.inquiry.title}`,
+      body: `<p>Dear ${esc(d.name)},</p><p>${esc(message)}</p>${lines.html}${button(d.link, 'Review contract')}`,
+      text: `Dear ${d.name},\n\n${message}\n${lines.text}\n\nReview contract: ${d.link}`,
+    };
+  },
+};
+
+/** 合同审核通过（05 §6）：发给 contract:approve 用户 */
+const contractApproveRequest: MailTemplate<MailTemplateDataMap['contract.approveRequest']> = {
+  type: 'APPROVAL',
+  render(lang, d) {
+    const lines = contractLines(lang, d);
+    if (lang === 'zh-CN') {
+      const message = `合同已由 ${d.actorName} 审核通过，请您批准：`;
+      return {
+        subject: `合同待批准：${d.contractNo} ${d.inquiry.title}`,
+        body: `<p>${esc(d.name)}，您好：</p><p>${esc(message)}</p>${lines.html}${button(d.link, '查看并批准')}`,
+        text: `${d.name}，您好：\n\n${message}\n${lines.text}\n\n查看并批准：${d.link}`,
+      };
+    }
+    const message = `The contract has been reviewed by ${d.actorName} and is waiting for your approval:`;
+    return {
+      subject: `Contract pending approval: ${d.contractNo} ${d.inquiry.title}`,
+      body: `<p>Dear ${esc(d.name)},</p><p>${esc(message)}</p>${lines.html}${button(d.link, 'Approve contract')}`,
+      text: `Dear ${d.name},\n\n${message}\n${lines.text}\n\nApprove contract: ${d.link}`,
+    };
+  },
+};
+
+/** 合同审核驳回、批准、批准驳回（05 §6）：发给最近一次的提交人，驳回时带意见 */
+const contractResult: MailTemplate<MailTemplateDataMap['contract.result']> = {
+  type: 'APPROVAL',
+  render(lang, d) {
+    const lines = contractLines(lang, d);
+    if (lang === 'zh-CN') {
+      const stepName = d.step === 'REVIEW' ? '合同审核' : '合同批准';
+      const message = d.approved
+        ? `合同已由 ${d.actorName} 批准，审批完成，请按合同线下签订，签字后可上传扫描件。`
+        : `合同在${stepName}环节被 ${d.actorName} 驳回，已回到草稿，请修改后重新提交。`;
+      const comment = d.comment ? `驳回意见：${d.comment}` : '';
+      return {
+        subject: d.approved
+          ? `合同已批准：${d.contractNo} ${d.inquiry.title}`
+          : `合同被驳回：${d.contractNo} ${d.inquiry.title}`,
+        body: `<p>${esc(d.name)}，您好：</p><p>${esc(message)}</p>${lines.html}${comment ? `<p>${esc(comment)}</p>` : ''}${button(d.link, '查看合同')}`,
+        text: `${d.name}，您好：\n\n${message}\n${lines.text}${comment ? `\n${comment}` : ''}\n\n查看合同：${d.link}`,
+      };
+    }
+    const stepName = d.step === 'REVIEW' ? 'review' : 'approval';
+    const message = d.approved
+      ? `The contract has been approved by ${d.actorName}. Please sign the paper contract; the signed scan can be uploaded afterwards.`
+      : `The contract was rejected by ${d.actorName} at the ${stepName} step and has been returned to draft. Please revise it and submit it again.`;
+    const comment = d.comment ? `Comment: ${d.comment}` : '';
+    return {
+      subject: d.approved
+        ? `Contract approved: ${d.contractNo} ${d.inquiry.title}`
+        : `Contract rejected: ${d.contractNo} ${d.inquiry.title}`,
+      body: `<p>Dear ${esc(d.name)},</p><p>${esc(message)}</p>${lines.html}${comment ? `<p>${esc(comment)}</p>` : ''}${button(d.link, 'View contract')}`,
+      text: `Dear ${d.name},\n\n${message}\n${lines.text}${comment ? `\n${comment}` : ''}\n\nView contract: ${d.link}`,
+    };
+  },
+};
+
 export const MAIL_TEMPLATES: { [K in MailTemplateKey]: MailTemplate<MailTemplateDataMap[K]> } = {
   'account.resetPassword': resetPassword,
   'account.activate': activate,
@@ -601,4 +710,7 @@ export const MAIL_TEMPLATES: { [K in MailTemplateKey]: MailTemplate<MailTemplate
   'negotiation.agreed': negotiationAgreed,
   award,
   result,
+  'contract.reviewRequest': contractReviewRequest,
+  'contract.approveRequest': contractApproveRequest,
+  'contract.result': contractResult,
 };

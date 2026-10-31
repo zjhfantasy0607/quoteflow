@@ -1,4 +1,4 @@
-import { Injectable, Module } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
   contractSnapshotSchema,
   type ContractSnapshot,
@@ -8,7 +8,6 @@ import {
 import type { Prisma } from '../../generated/prisma/client';
 import { SequenceService } from '../../infra/sequences/sequence.service';
 import { FILE_ORDER } from '../inquiries/inquiry-dto';
-import { PplModule } from '../ppl/ppl.controller';
 import { PplService, resolveVariantColumns } from '../ppl/ppl.service';
 import { QUOTE_VERSION_OWNER } from '../quotes/quote-dto';
 
@@ -214,11 +213,3 @@ export class ContractDraftFactory {
     return codes.map((c) => nameOf.get(c) ?? c).join('；');
   }
 }
-
-/** 合同（01 §4.1 modules/contracts）：M12 只有定标时生成草稿，列表、详情、流转在 M14 补充 */
-@Module({
-  imports: [PplModule],
-  providers: [ContractDraftFactory],
-  exports: [ContractDraftFactory],
-})
-export class ContractsModule {}

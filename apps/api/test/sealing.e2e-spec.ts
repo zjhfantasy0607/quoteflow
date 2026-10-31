@@ -39,6 +39,7 @@ function expectNoSecrets(value: unknown, where: string): void {
  * 密封测试集（05 §7.1、M10 §6）：一轮 3 家供应商，甲、乙已提交（甲带附件），丙未响应。
  * 开标前用 BUYER、PURCHASE_MANAGER、ADMIN 走一遍所有能拿到报价数据的出口。
  * M11 的比价矩阵、导出与议价线程在 expectQuoteSealed()（要 inquiry:evaluate / inquiry:export）；
+ * M14 的合同列表在 internalExits()，合同详情与合同里的报价附件另有兜底用例；
  * M15 的报表、M16 的工作台各自把新出口补进 internalExits()
  */
 describe('M10 密封测试集', () => {
@@ -82,7 +83,10 @@ describe('M10 密封测试集', () => {
     }
   }
 
-  /** 不需要 inquiry:evaluate 的出口：响应列表、询价单详情 / 轮次 / 列表、时间线，有权限时还有系统日志与邮件记录 */
+  /**
+   * 不需要 inquiry:evaluate 的出口：响应列表、询价单详情 / 轮次 / 列表、时间线、合同列表（M14），
+   * 有权限时还有系统日志与邮件记录
+   */
   async function internalExits(agent: Agent, name: string): Promise<void> {
     const list = await responses(agent);
     expect(list.sealed).toBe(true);
@@ -101,6 +105,7 @@ describe('M10 密封测试集', () => {
       roundUrl(),
       '/api/inquiries?page=1&pageSize=50',
       `/api/inquiries/${p.inquiry.id}/timeline`,
+      '/api/contracts?page=1&pageSize=50',
     ];
     for (const url of pages) expectNoSecrets((await agent.get(url).expect(200)).body, `${name} ${url}`);
   }
@@ -143,7 +148,12 @@ describe('M10 密封测试集', () => {
       c: await createSupplier(ctx.prisma, { code: 'TS-C', nameZh: '供应商丙' }),
     };
     const account = (supplier: Supplier, username: string) =>
-      createUser(ctx.prisma, { username, roles: ['SUPPLIER'], userType: 'SUPPLIER', supplierId: supplier.id });
+      createUser(ctx.prisma, {
+        username,
+        roles: ['SUPPLIER'],
+        userType: 'SUPPLIER',
+        supplierId: supplier.id,
+      });
     users.a = await account(s.a, 'a@supplier.example.com');
     users.b = await account(s.b, 'b@supplier.example.com');
     agents = {
@@ -163,7 +173,11 @@ describe('M10 密封测试集', () => {
       '密封测试询价',
     );
     attachmentId = (
-      await portal.a.post('/api/files').field('kind', 'ATTACHMENT').attach('file', PDF, '甲报价说明.pdf').expect(201)
+      await portal.a
+        .post('/api/files')
+        .field('kind', 'ATTACHMENT')
+        .attach('file', PDF, '甲报价说明.pdf')
+        .expect(201)
     ).body.id;
     ctx.clock.set(at(HOUR));
     await submitQuote(portal.a, p.quotes[0], ledLines(p, '3.3333', '5.5555'), {
@@ -188,7 +202,9 @@ describe('M10 密封测试集', () => {
 
   it('S-1 邮件表里的所有邮件（含发给内部用户的审批邮件）正文都没有报价内容', async () => {
     const emails = await ctx.prisma.emailMessage.findMany();
-    const internal = emails.filter((e) => e.userId !== null || e.toAddresses.some((a) => a.endsWith('@example.com')));
+    const internal = emails.filter(
+      (e) => e.userId !== null || e.toAddresses.some((a) => a.endsWith('@example.com')),
+    );
     expect(internal.length).toBeGreaterThan(0);
     for (const e of emails) expectNoSecrets([e.subject, e.html, e.text], `email ${e.id}`);
   });
@@ -252,6 +268,43 @@ describe('M10 密封测试集', () => {
     await adminExits();
   });
 
+  it('S-1 M14 合同也经过 SealService（兜底）：轮次没开过标的合同列表金额为 null、详情 QUOTE_SEALED、报价附件不能经合同访问', async () => {
+    // 合同只在定标时生成，所属轮次一定开过标；正常流程造不出这种合同，直接写库验证兜底
+    const version = await ctx.prisma.quoteVersion.findFirstOrThrow({ where: { quoteId: p.quotes[0] } });
+    const contract = await ctx.prisma.contract.create({
+      data: {
+        contractNo: 'CT-SEALED-0001',
+        inquiryId: p.inquiry.id,
+        roundId: p.roundId,
+        quoteId: p.quotes[0],
+        quoteVersionId: version.id,
+        supplierId: s.a.id,
+        amount: '6111.05',
+        currency: 'CNY',
+        snapshot: {},
+        createdById: users.buyer.id,
+      },
+    });
+    try {
+      for (const [name, agent] of Object.entries(agents)) {
+        const list = (await agent.get('/api/contracts?page=1&pageSize=50').expect(200)).body;
+        expect(
+          list.items.map((c: { contractNo: string; amount: string | null }) => [c.contractNo, c.amount]),
+        ).toEqual([['CT-SEALED-0001', null]]);
+        expectNoSecrets(list, `${name} contracts`);
+        expect((await agent.get(`/api/contracts/${contract.id}`).expect(403)).body.code).toBe('QUOTE_SEALED');
+      }
+      // 采购员、主管有 contract:view：合同的文件解析器照样拒绝中标版本的报价附件
+      for (const agent of [agents.buyer, agents.manager]) {
+        expect((await agent.get(`/api/files/${attachmentId}/content`).expect(403)).body.code).toBe(
+          'FILE_ACCESS_DENIED',
+        );
+      }
+    } finally {
+      await ctx.prisma.contract.delete({ where: { id: contract.id } });
+    }
+  });
+
   it('S-5 开标后有 inquiry:evaluate 的人能看报价、合计与附件；审计和开标邮件里仍然没有金额', async () => {
     await agents.manager.post(`${roundUrl()}/open`).expect(200);
     const list = await responses(agents.buyer);
@@ -280,7 +333,10 @@ describe('M10 密封测试集', () => {
     expect((await agents.admin.get(quoteUrl(0)).expect(403)).body.code).toBe('FORBIDDEN');
     await agents.admin.get(`/api/files/${attachmentId}/content`).expect(403);
 
-    expectNoSecrets((await agents.buyer.get(`/api/inquiries/${p.inquiry.id}/timeline`).expect(200)).body, 'timeline');
+    expectNoSecrets(
+      (await agents.buyer.get(`/api/inquiries/${p.inquiry.id}/timeline`).expect(200)).body,
+      'timeline',
+    );
     const emails = await ctx.prisma.emailMessage.findMany({ where: { type: 'OPENING' } });
     expect(emails).toHaveLength(2);
     for (const e of emails) expectNoSecrets([e.subject, e.html, e.text], `opening ${e.id}`);
@@ -297,7 +353,10 @@ describe('M10 密封测试集', () => {
       at(10 * HOUR),
     );
     await submitQuote(portal.a, never.quotes[0], ledLines(never, '3.3333', '5.5555'));
-    await agents.manager.post(`/api/inquiries/${never.inquiry.id}/cancel`).send({ reason: '需求取消' }).expect(200);
+    await agents.manager
+      .post(`/api/inquiries/${never.inquiry.id}/cancel`)
+      .send({ reason: '需求取消' })
+      .expect(200);
     const url = `/api/inquiries/${never.inquiry.id}/rounds/1`;
     expect((await agents.manager.get(`${url}/quotes/${never.quotes[0]}`).expect(403)).body.code).toBe(
       'QUOTE_SEALED',
@@ -309,7 +368,10 @@ describe('M10 密封测试集', () => {
     expect(list.items[0]).not.toHaveProperty('totalAmount');
 
     // 上一张开过标的询价取消后：报价作废，内容和合计照样能看
-    await agents.manager.post(`/api/inquiries/${p.inquiry.id}/cancel`).send({ reason: '改用其他方案' }).expect(200);
+    await agents.manager
+      .post(`/api/inquiries/${p.inquiry.id}/cancel`)
+      .send({ reason: '改用其他方案' })
+      .expect(200);
     const opened = await responses(agents.buyer);
     expect(opened.sealed).toBe(false);
     expect(opened.items[0]).toMatchObject({ status: 'VOID', totalAmount: '6111.05' });
@@ -344,7 +406,9 @@ describe('M10 密封测试集', () => {
       at(10 * HOUR),
       '变更前未开标',
     );
-    await submitQuote(portal.a, never.quotes[0], ledLines(never, '3.3333', '5.5555'), { remark: '甲机密备注' });
+    await submitQuote(portal.a, never.quotes[0], ledLines(never, '3.3333', '5.5555'), {
+      remark: '甲机密备注',
+    });
     await change(never.inquiry.id, at(11 * HOUR));
     const base = `/api/inquiries/${never.inquiry.id}`;
     const url = `${base}/rounds/1`;
@@ -364,7 +428,14 @@ describe('M10 密封测试集', () => {
       const list: RoundResponsesDto = (await agent.get(`${url}/responses`).expect(200)).body;
       expect(list).toMatchObject({ sealed: true, items: [{ status: 'VOID' }, { status: 'VOID' }] });
       expect(list.items[0]).not.toHaveProperty('totalAmount');
-      for (const page of [base, `${base}/rounds`, url, `${base}/rounds/2`, `${base}/rounds/2/diff`, `${base}/timeline`]) {
+      for (const page of [
+        base,
+        `${base}/rounds`,
+        url,
+        `${base}/rounds/2`,
+        `${base}/rounds/2/diff`,
+        `${base}/timeline`,
+      ]) {
         expectNoSecrets((await agent.get(page).expect(200)).body, `${name} ${page}`);
       }
     }
@@ -392,7 +463,9 @@ describe('M10 密封测试集', () => {
     await agents.manager.post(`/api/inquiries/${opened.inquiry.id}/rounds/1/open`).expect(200);
     await change(opened.inquiry.id, at(11 * HOUR));
     const old = `/api/inquiries/${opened.inquiry.id}/rounds/1`;
-    const detail: RoundQuoteDetailDto = (await agents.buyer.get(`${old}/quotes/${opened.quotes[0]}`).expect(200)).body;
+    const detail: RoundQuoteDetailDto = (
+      await agents.buyer.get(`${old}/quotes/${opened.quotes[0]}`).expect(200)
+    ).body;
     expect(detail).toMatchObject({ status: 'VOID', currentVersion: { totalAmount: '2200.00' } });
     const matrix: RoundMatrixDto = (await agents.buyer.get(`${old}/matrix`).expect(200)).body;
     expect(matrix).toMatchObject({ roundStatus: 'SUPERSEDED', canShortlist: false });

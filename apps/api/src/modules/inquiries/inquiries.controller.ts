@@ -82,7 +82,7 @@ import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { IMPORT_HARD_LIMIT_BYTES, xlsxFile } from '../../infra/excel/excel-http';
 import type { UploadedFileInput } from '../../infra/files/files.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ContractsModule } from '../contracts/contract-draft.factory';
+import { ContractsModule } from '../contracts/contracts.controller';
 import { MaterialCategoriesModule } from '../material-categories/material-categories.controller';
 import { MaterialsModule } from '../materials/materials.controller';
 import { PointsModule } from '../points/points.service';
