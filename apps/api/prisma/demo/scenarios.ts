@@ -1,11 +1,12 @@
 // 演示场景（docs/06-种子数据.md §3）。单据一律通过 service 方法创建，状态和不变量与真实操作一致。
-// 哪个模块完成就在这里补哪个场景：M06 → D1、D2；M09 → D3；M11 → D4；M12 → D5；M13 → D6。
+// 哪个模块完成就在这里补哪个场景：M06 → D1、D2；M09 → D3；M11 → D4；M12 → D5；M13 → D6；M14 → D7。
 import type { INestApplicationContext } from '@nestjs/common';
 import {
   approveInquirySchema,
   attachInquiryFileSchema,
   awardRoundSchema,
   changeRoundSchema,
+  contractDecisionSchema,
   createInquirySchema,
   createLineSchema,
   linesFromMaterialsSchema,
@@ -14,6 +15,7 @@ import {
   publishRoundSchema,
   quoteFormSchema,
   updateInviteesSchema,
+  updateContractSchema,
   updateLineSchema,
   type InquiryFileKind,
 } from '@quoteflow/shared';
@@ -34,6 +36,7 @@ import { RoundWorkflowService } from '../../src/modules/inquiries/round-workflow
 import { NegotiationsService } from '../../src/modules/negotiations/negotiations.service';
 import { PortalQuotesService } from '../../src/modules/portal/portal-quotes.service';
 import { QuoteSubmissionService } from '../../src/modules/portal/quote-submission.service';
+import { ContractsService } from '../../src/modules/contracts/contracts.service';
 import { RoundShortlistService } from '../../src/modules/quotes/round-shortlist.service';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { demoPdf, demoPng } from './demo-files';
@@ -41,7 +44,7 @@ import { demoPdf, demoPng } from './demo-files';
 export interface DemoContext {
   app: INestApplicationContext;
   prisma: PrismaService;
-  users: Record<'pd' | 'buyer' | 'manager', AuthUser>;
+  users: Record<'pd' | 'buyer' | 'manager' | 'approver', AuthUser>;
   category: Record<string, string>;
   material: Record<string, string>;
 }
@@ -64,6 +67,7 @@ export async function demoContext(app: INestApplicationContext): Promise<DemoCon
       pd: await actor('pd.wang'),
       buyer: await actor('buyer.zhang'),
       manager: await actor('manager.zhang'),
+      approver: await actor('approver.zhao'),
     },
     category: Object.fromEntries(categories.map((c) => [c.code, c.id])),
     material: Object.fromEntries(materials.map((m) => [m.code, m.id])),
@@ -960,6 +964,161 @@ export async function seedD6(ctx: DemoContext): Promise<string> {
         changeNote: '按 Ra90 规格重新报价，交期 25 天。',
       }),
     ),
+  );
+  return inquiry.formalNo!;
+}
+
+/** D7 两行灯具支架报价（PPL-PERIPH 的必填列：含税单价、税率、交期、材质） */
+function d7Values(prices: [string, string], leadTimeDays: number, brand: string): Record<string, unknown>[] {
+  const common = {
+    brand,
+    material: 'SPCC 冷轧钢板',
+    tax_rate: '13',
+    lead_time_days: leadTimeDays,
+    moq: 2000,
+    price_valid_until: '2027-06-30',
+    payment_terms: 'NET30',
+    sample_lead_days: 7,
+    warranty_months: 24,
+    rohs: true,
+    packing_method: 'CARTON',
+    trade_term: 'DAP',
+  };
+  return [
+    { ...common, model: 'BK-120-W', unit_price_incl_tax: prices[0], pcs_per_carton: 200 },
+    { ...common, model: 'BK-300-B', unit_price_incl_tax: prices[1], pcs_per_carton: 100 },
+  ];
+}
+
+/**
+ * D7：PJ-2026-006 / 灯具支架询价，合同已批准。十五天前建单审批、十四天前发布给 SUP10003、SUP10004，两家都报价；
+ * 十天前截止、九天前开标，八天前采购主管定标 SUP10003 生成合同草稿；七天前采购员补充交付与付款条款提交审核，
+ * 六天前采购主管审核通过，五天前合同批准人批准
+ */
+export async function seedD7(ctx: DemoContext): Promise<string> {
+  const { pd, buyer, manager, approver } = ctx.users;
+  const deadline = inAppTz(new Date())
+    .subtract(10, 'day')
+    .hour(18)
+    .minute(0)
+    .second(0)
+    .millisecond(0)
+    .toDate();
+  const bracket = ctx.category['PER-BRKT'];
+  const inquiry = await atOffset(ctx, -15 * DAY_MS, async () => {
+    const created = await ctx.app.get(InquiriesService).create(
+      buyer,
+      createInquirySchema.parse({
+        projectNo: 'PJ-2026-006',
+        title: '灯具支架询价',
+        materialCategoryId: bracket,
+        currency: 'CNY',
+        description: '筒灯与线条灯安装支架，表面喷涂，需提供盐雾测试报告。',
+        ownerId: buyer.id,
+        pdUserId: pd.id,
+      }),
+    );
+    const lines = ctx.app.get(InquiryLinesService);
+    await lines.createFromMaterials(
+      buyer,
+      created.id,
+      1,
+      linesFromMaterialsSchema.parse({ items: [{ materialId: ctx.material['MAT-000010'], quantity: '15000' }] }),
+    );
+    await lines.create(
+      buyer,
+      created.id,
+      1,
+      createLineSchema.parse({
+        source: 'MANUAL',
+        nameZh: '灯具支架（加长）',
+        nameEn: 'Lamp Bracket (Long)',
+        spec: 'SPCC 1.5mm / 黑色喷涂 / 长 300mm',
+        unitCode: 'PCS',
+        categoryId: bracket,
+        quantity: '5000',
+      }),
+    );
+    const workflow = ctx.app.get(InquiryWorkflowService);
+    await workflow.submit(buyer, created.id);
+    return workflow.approve(manager, created.id, approveInquirySchema.parse({}));
+  });
+
+  const suppliers = await ctx.prisma.supplier.findMany({
+    where: { code: { in: ['SUP10003', 'SUP10004'] } },
+    select: { id: true },
+  });
+  await atOffset(ctx, -14 * DAY_MS, async () => {
+    await ctx.app
+      .get(InquiryInviteesService)
+      .replace(buyer, inquiry.id, updateInviteesSchema.parse({ supplierIds: suppliers.map((s) => s.id) }));
+    await ctx.app
+      .get(RoundWorkflowService)
+      .publish(buyer, inquiry.id, 1, publishRoundSchema.parse({ deadline: deadline.toISOString() }));
+  });
+
+  const quotes = await ctx.prisma.quote.findMany({
+    where: { round: { inquiryId: inquiry.id } },
+    select: { id: true, supplier: { select: { code: true } } },
+  });
+  const quoteOf = (code: string) => quotes.find((q) => q.supplier.code === code)!.id;
+  const lines = await ctx.prisma.inquiryLine.findMany({
+    where: { round: { inquiryId: inquiry.id } },
+    orderBy: { lineNo: 'asc' },
+    select: { id: true },
+  });
+  const submission = ctx.app.get(QuoteSubmissionService);
+  const form = (values: Record<string, unknown>[], extra: Record<string, string> = {}) =>
+    quoteFormSchema.parse({ lines: { [lines[0].id]: values[0], [lines[1].id]: values[1] }, ...extra });
+  const xinneng = await supplierActor(ctx, 'SUP10003');
+  const jinggong = await supplierActor(ctx, 'SUP10004');
+  await atOffset(ctx, -13 * DAY_MS, () =>
+    submission.submit(
+      xinneng,
+      quoteOf('SUP10003'),
+      form(d7Values(['3.20', '5.80'], 20, '新能'), { remark: '含税含运费，送货到深圳宝安。' }),
+    ),
+  );
+  await atOffset(ctx, -13 * DAY_MS + 5 * HOUR_MS, () =>
+    submission.submit(jinggong, quoteOf('SUP10004'), form(d7Values(['3.35', '5.60'], 25, '精工'))),
+  );
+
+  // 截止任务关闭（截止在十天前 18:00），九天前开标，八天前定标 SUP10003
+  await atOffset(ctx, deadline.getTime() - Date.now() + 60_000, () => ctx.app.get(RoundDeadlineJob).run());
+  await atOffset(ctx, -9 * DAY_MS, () => ctx.app.get(RoundWorkflowService).open(manager, inquiry.id, 1));
+  const awarded = await atOffset(ctx, -8 * DAY_MS, () =>
+    ctx.app
+      .get(RoundAwardService)
+      .award(
+        manager,
+        inquiry.id,
+        1,
+        awardRoundSchema.parse({ quoteId: quoteOf('SUP10003'), comment: '合计最低，交期 20 天。' }),
+      ),
+  );
+
+  // 合同：补充交付与付款条款 → 提交审核 → 审核通过 → 批准
+  const contractId = awarded.award!.contract!.id;
+  const contracts = ctx.app.get(ContractsService);
+  await atOffset(ctx, -7 * DAY_MS, async () => {
+    await contracts.update(
+      buyer,
+      contractId,
+      updateContractSchema.parse({
+        deliveryDate: inAppTz(new Date()).add(23, 'day').format('YYYY-MM-DD'),
+        deliveryPlace: '深圳市宝安区福永街道示例工业园 3 栋',
+        paymentTerms: '货到验收后 30 天付款',
+        summary: '灯具支架 2 款，共 20000 件，分两批交货。',
+        remark: '第一批 12000 件，第二批 8000 件。',
+      }),
+    );
+    await contracts.submit(buyer, contractId);
+  });
+  await atOffset(ctx, -6 * DAY_MS, () =>
+    contracts.review(manager, contractId, contractDecisionSchema.parse({ action: 'APPROVE', comment: '条款齐全' })),
+  );
+  await atOffset(ctx, -5 * DAY_MS, () =>
+    contracts.approve(approver, contractId, contractDecisionSchema.parse({ action: 'APPROVE' })),
   );
   return inquiry.formalNo!;
 }
