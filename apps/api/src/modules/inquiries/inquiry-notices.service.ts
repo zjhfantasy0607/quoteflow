@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AppConfig } from '../../config/app-config';
 import type { Inquiry, Prisma, Supplier } from '../../generated/prisma/client';
 import type { SupplierNotice } from '../../infra/mail/mail-templates';
-import { MailService, supplierMailLanguage } from '../../infra/mail/mail.service';
+import { MailService, supplierMailLanguage, userMailLanguage } from '../../infra/mail/mail.service';
 
 /** 要通知的报价单连同供应商 */
 export interface NoticeQuote {
@@ -14,7 +14,8 @@ type NoticeInquiry = Pick<Inquiry, 'id' | 'formalNo' | 'title' | 'ownerId'>;
 
 /**
  * 发给受邀供应商的询价通知（M07）：收件人是联系邮箱、抄送抄送邮箱，语言按首选语言（R07-5）；
- * 只带正式询价号和标题，不含项目号、其他供应商和金额。都在调用方的事务里入队（I-10）
+ * 只带正式询价号和标题，不含项目号、其他供应商和金额。M11 的议价通知也在这里（发给负责人的按其账号语言）。
+ * 都在调用方的事务里入队（I-10）
  */
 @Injectable()
 export class InquiryNoticesService {
@@ -107,6 +108,93 @@ export class InquiryNoticesService {
         data: { ...this.base(inquiry, q, buyer), ...data, link: this.link(q) },
       });
     }
+  }
+
+  /** 05 §5：采购方发目标价（OFFER）或结束议价（CLOSE）时通知供应商 */
+  async negotiationToSupplier(
+    tx: Prisma.TransactionClient,
+    inquiry: NoticeInquiry,
+    q: NoticeQuote,
+    data: { type: 'OFFER' | 'CLOSE'; negotiationRound: number },
+  ): Promise<void> {
+    const buyer = await this.buyer(tx, inquiry);
+    await this.mail.enqueue(tx, {
+      ...this.envelope(inquiry, q),
+      templateKey: 'negotiation.toSupplier',
+      data: { ...this.base(inquiry, q, buyer), ...data, link: this.link(q) },
+    });
+  }
+
+  /** 05 §5：供应商拒绝或反提案时通知询价负责人（按负责人的账号语言；没有邮箱的收不到） */
+  async negotiationToBuyer(
+    tx: Prisma.TransactionClient,
+    inquiry: NoticeInquiry,
+    q: NoticeQuote,
+    data: { type: 'REJECT' | 'COUNTER'; negotiationRound: number },
+  ): Promise<void> {
+    const owner = await this.owner(tx, inquiry);
+    await this.mail.enqueue(tx, {
+      ...this.ownerEnvelope(inquiry, owner),
+      templateKey: 'negotiation.toBuyer',
+      data: { ...this.buyerNotice(inquiry, q, owner, data.negotiationRound), type: data.type },
+    });
+  }
+
+  /** 05 §5：成交后双方各一封 */
+  async negotiationAgreed(
+    tx: Prisma.TransactionClient,
+    inquiry: NoticeInquiry,
+    q: NoticeQuote,
+    data: { negotiationRound: number; versionNo: number },
+  ): Promise<void> {
+    const buyer = await this.buyer(tx, inquiry);
+    await this.mail.enqueue(tx, {
+      ...this.envelope(inquiry, q),
+      templateKey: 'negotiation.agreed',
+      data: { ...this.base(inquiry, q, buyer), audience: 'SUPPLIER', link: this.link(q) },
+    });
+    const owner = await this.owner(tx, inquiry);
+    await this.mail.enqueue(tx, {
+      ...this.ownerEnvelope(inquiry, owner),
+      templateKey: 'negotiation.agreed',
+      data: {
+        ...this.buyerNotice(inquiry, q, owner, data.negotiationRound),
+        versionNo: data.versionNo,
+        audience: 'BUYER',
+      },
+    });
+  }
+
+  private owner(tx: Prisma.TransactionClient, inquiry: NoticeInquiry) {
+    return tx.user.findUniqueOrThrow({
+      where: { id: inquiry.ownerId },
+      select: { id: true, name: true, email: true, locale: true },
+    });
+  }
+
+  private ownerEnvelope(inquiry: NoticeInquiry, owner: { id: string; email: string | null; locale: string }) {
+    return {
+      language: userMailLanguage(owner),
+      to: owner.email ? [owner.email] : [],
+      userId: owner.id,
+      inquiryId: inquiry.id,
+    };
+  }
+
+  /** 内部邮件：负责人称呼、供应商、询价号；链接到询价详情的"议价"页签 */
+  private buyerNotice(
+    inquiry: NoticeInquiry,
+    q: NoticeQuote,
+    owner: { name: string },
+    negotiationRound: number,
+  ) {
+    return {
+      name: owner.name,
+      supplier: { code: q.supplier.code, nameZh: q.supplier.nameZh, nameEn: q.supplier.nameEn },
+      inquiry: { formalNo: inquiry.formalNo!, title: inquiry.title },
+      negotiationRound,
+      link: `${this.config.get('APP_BASE_URL')}/inquiries/${inquiry.id}?tab=negotiation`,
+    };
   }
 
   /** 采购联系人：询价负责人的姓名和邮箱（没有邮箱时只写姓名） */

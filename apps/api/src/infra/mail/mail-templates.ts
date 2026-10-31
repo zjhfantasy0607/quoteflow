@@ -36,6 +36,26 @@ export interface MailTemplateDataMap {
   'change.deadline': SupplierNotice & { previousDeadline: Date; deadline: Date; link: string };
   'change.cancel': SupplierNotice & { reason: string };
   opening: SupplierNotice & { openedAt: Date; link: string };
+  'negotiation.toSupplier': SupplierNotice & {
+    type: 'OFFER' | 'CLOSE';
+    negotiationRound: number;
+    link: string;
+  };
+  'negotiation.toBuyer': NegotiationBuyerNotice & { type: 'REJECT' | 'COUNTER' };
+  'negotiation.agreed':
+    | (SupplierNotice & { audience: 'SUPPLIER'; link: string })
+    | (NegotiationBuyerNotice & { audience: 'BUYER' });
+}
+
+/** 发给询价负责人的议价通知（M11）：内部邮件也不写金额和议价内容（管理员能在邮件记录里看到正文） */
+export interface NegotiationBuyerNotice {
+  name: string;
+  supplier: { code: string; nameZh: string; nameEn: string | null };
+  inquiry: { formalNo: string; title: string };
+  negotiationRound: number;
+  /** 成交时生成的报价版本号 */
+  versionNo?: number;
+  link: string;
 }
 
 /**
@@ -292,6 +312,148 @@ const opening: MailTemplate<MailTemplateDataMap['opening']> = {
   },
 };
 
+/**
+ * 议价（05 §5、R11-7）：采购方发目标价或结束议价时通知供应商，链接到门户报价单。不写目标价、方案说明等议价内容，
+ * 供应商登录门户查看
+ */
+const negotiationToSupplier: MailTemplate<MailTemplateDataMap['negotiation.toSupplier']> = {
+  type: 'NEGOTIATION',
+  render(lang, d, ctx) {
+    const n = notice(lang, d);
+    const { formalNo, title } = d.inquiry;
+    if (lang === 'zh-CN') {
+      const offer = d.type === 'OFFER';
+      const message = offer
+        ? `${ctx.company.nameZh}就询价 ${formalNo}（${title}）向${n.supplier}发起议价第 ${d.negotiationRound} 轮，提出了目标价和方案。请登录供应商门户查看，并选择接受、拒绝或提出反提案。`
+        : `${ctx.company.nameZh}已结束询价 ${formalNo}（${title}）与${n.supplier}的议价，议价记录可在供应商门户查看。感谢贵司的配合。`;
+      return {
+        subject: offer ? `议价通知：${formalNo} ${title}` : `议价结束：${formalNo} ${title}`,
+        body: `${n.hello}<p>${esc(message)}</p>${button(d.link, offer ? '查看并回复' : '查看议价记录')}${n.contact}`,
+        text: `${n.helloText}
+
+${message}
+
+${offer ? '查看并回复' : '查看议价记录'}：${d.link}
+
+${n.contactText}`,
+      };
+    }
+    const offer = d.type === 'OFFER';
+    const message = offer
+      ? `${ctx.company.nameEn} has started negotiation round ${d.negotiationRound} with ${n.supplier} on RFQ ${formalNo} (${title}) and proposed target prices and terms. Please sign in to the supplier portal to review them and accept, reject or make a counter-offer.`
+      : `${ctx.company.nameEn} has closed the negotiation with ${n.supplier} on RFQ ${formalNo} (${title}). The negotiation history is available in the supplier portal. Thank you for your cooperation.`;
+    const action = offer ? 'Review and reply' : 'View negotiation history';
+    return {
+      subject: offer
+        ? `Negotiation request: ${formalNo} ${title}`
+        : `Negotiation closed: ${formalNo} ${title}`,
+      body: `${n.hello}<p>${esc(message)}</p>${button(d.link, action)}${n.contact}`,
+      text: `${n.helloText}
+
+${message}
+
+${action}: ${d.link}
+
+${n.contactText}`,
+    };
+  },
+};
+
+/** 供应商拒绝或反提案（05 §5）：发给询价负责人，链接到询价详情的"议价"页签 */
+const negotiationToBuyer: MailTemplate<MailTemplateDataMap['negotiation.toBuyer']> = {
+  type: 'NEGOTIATION',
+  render(lang, d) {
+    const { formalNo, title } = d.inquiry;
+    const { code } = d.supplier;
+    if (lang === 'zh-CN') {
+      const what = d.type === 'COUNTER' ? '提出了反提案' : '拒绝了目标价';
+      const message = `${d.supplier.nameZh}（${code}）对询价 ${formalNo}（${title}）议价第 ${d.negotiationRound} 轮的目标价${what}，请及时处理。`;
+      return {
+        subject: `议价回复：${formalNo} ${title} · ${code}`,
+        body: `<p>${esc(d.name)}，您好：</p><p>${esc(message)}</p>${button(d.link, '查看议价')}`,
+        text: `${d.name}，您好：
+
+${message}
+
+查看议价：${d.link}`,
+      };
+    }
+    const supplier = d.supplier.nameEn ?? d.supplier.nameZh;
+    const what = d.type === 'COUNTER' ? 'made a counter-offer to' : 'rejected';
+    const message = `${supplier} (${code}) has ${what} the target prices of negotiation round ${d.negotiationRound} on RFQ ${formalNo} (${title}). Please follow up.`;
+    return {
+      subject: `Negotiation reply: ${formalNo} ${title} · ${code}`,
+      body: `<p>Dear ${esc(d.name)},</p><p>${esc(message)}</p>${button(d.link, 'View negotiation')}`,
+      text: `Dear ${d.name},
+
+${message}
+
+View negotiation: ${d.link}`,
+    };
+  },
+};
+
+/** 议价成交（05 §5）：双方各一封，成交内容已生成新的报价版本 */
+const negotiationAgreed: MailTemplate<MailTemplateDataMap['negotiation.agreed']> = {
+  type: 'NEGOTIATION',
+  render(lang, d) {
+    const { formalNo, title } = d.inquiry;
+    if (d.audience === 'SUPPLIER') {
+      const n = notice(lang, d);
+      if (lang === 'zh-CN') {
+        const message = `询价 ${formalNo}（${title}）与${n.supplier}的议价已成交，成交内容已生成新的报价版本。请登录供应商门户查看议价记录和报价版本，评标结果将另行通知。`;
+        return {
+          subject: `议价成交：${formalNo} ${title}`,
+          body: `${n.hello}<p>${esc(message)}</p>${button(d.link, '查看我的报价')}${n.contact}`,
+          text: `${n.helloText}
+
+${message}
+
+查看我的报价：${d.link}
+
+${n.contactText}`,
+        };
+      }
+      const message = `The negotiation with ${n.supplier} on RFQ ${formalNo} (${title}) has been agreed, and a new quotation version has been created from the agreed terms. Please sign in to the supplier portal to view the negotiation history and the quotation versions. You will be notified of the evaluation result separately.`;
+      return {
+        subject: `Negotiation agreed: ${formalNo} ${title}`,
+        body: `${n.hello}<p>${esc(message)}</p>${button(d.link, 'View my quotation')}${n.contact}`,
+        text: `${n.helloText}
+
+${message}
+
+View my quotation: ${d.link}
+
+${n.contactText}`,
+      };
+    }
+    const { code } = d.supplier;
+    if (lang === 'zh-CN') {
+      const message = `询价 ${formalNo}（${title}）与 ${d.supplier.nameZh}（${code}）的议价第 ${d.negotiationRound} 轮已成交，已生成报价第 ${d.versionNo} 版，比价矩阵已显示成交后的报价。`;
+      return {
+        subject: `议价成交：${formalNo} ${title} · ${code}`,
+        body: `<p>${esc(d.name)}，您好：</p><p>${esc(message)}</p>${button(d.link, '查看议价')}`,
+        text: `${d.name}，您好：
+
+${message}
+
+查看议价：${d.link}`,
+      };
+    }
+    const supplier = d.supplier.nameEn ?? d.supplier.nameZh;
+    const message = `Negotiation round ${d.negotiationRound} with ${supplier} (${code}) on RFQ ${formalNo} (${title}) has been agreed. Quotation version ${d.versionNo} has been created and the comparison matrix now shows the agreed quotation.`;
+    return {
+      subject: `Negotiation agreed: ${formalNo} ${title} · ${code}`,
+      body: `<p>Dear ${esc(d.name)},</p><p>${esc(message)}</p>${button(d.link, 'View negotiation')}`,
+      text: `Dear ${d.name},
+
+${message}
+
+View negotiation: ${d.link}`,
+    };
+  },
+};
+
 export const MAIL_TEMPLATES: { [K in MailTemplateKey]: MailTemplate<MailTemplateDataMap[K]> } = {
   'account.resetPassword': resetPassword,
   'account.activate': activate,
@@ -302,4 +464,7 @@ export const MAIL_TEMPLATES: { [K in MailTemplateKey]: MailTemplate<MailTemplate
   'change.deadline': deadlineChanged,
   'change.cancel': cancelled,
   opening,
+  'negotiation.toSupplier': negotiationToSupplier,
+  'negotiation.toBuyer': negotiationToBuyer,
+  'negotiation.agreed': negotiationAgreed,
 };

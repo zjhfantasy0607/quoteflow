@@ -1,8 +1,10 @@
 import type { InquiryDetailDto, PortalQuoteDetailDto } from '@quoteflow/shared';
 import type { Worksheet } from 'exceljs';
 import type { PrismaClient } from '../../src/generated/prisma/client';
+import { RoundDeadlineJob } from '../../src/modules/inquiries/round-deadline.job';
 import type { Agent } from './auth';
 import { addManualLine, createDraftInquiry, publishRound } from './inquiries';
+import type { TestContext } from './test-app';
 import { loadXlsx } from './xlsx';
 
 /** PPL-LED（灯珠分类）的必填列：主模板的含税单价、税率、交期 + 变体改为必填的 4 列 */
@@ -82,6 +84,18 @@ export async function submitQuote(
       .send({ lines, ...extra })
       .expect(200)
   ).body;
+}
+
+/** 把测试时钟拨到截止时间、执行截止任务，再由 opener（要有 inquiry:open）开标（M10） */
+export async function openRound(
+  ctx: TestContext,
+  opener: Agent,
+  p: { inquiry: { id: string } },
+  deadline: Date,
+): Promise<InquiryDetailDto> {
+  ctx.clock.set(deadline);
+  await ctx.app.get(RoundDeadlineJob).run();
+  return (await opener.post(`/api/inquiries/${p.inquiry.id}/rounds/1/open`).expect(200)).body;
 }
 
 export async function declineQuote(

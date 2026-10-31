@@ -4,6 +4,7 @@ import type {
   EmailListItemDto,
   Paginated,
   RoleDto,
+  RoundMatrixDto,
   RoundQuoteDetailDto,
   RoundResponsesDto,
 } from '@quoteflow/shared';
@@ -37,7 +38,8 @@ function expectNoSecrets(value: unknown, where: string): void {
 /**
  * 密封测试集（05 §7.1、M10 §6）：一轮 3 家供应商，甲、乙已提交（甲带附件），丙未响应。
  * 开标前用 BUYER、PURCHASE_MANAGER、ADMIN 走一遍所有能拿到报价数据的出口。
- * M11 的比价矩阵与导出、M15 的报表、M16 的工作台各自把新出口补进 internalExits()
+ * M11 的比价矩阵、导出与议价线程在 expectQuoteSealed()（要 inquiry:evaluate / inquiry:export）；
+ * M15 的报表、M16 的工作台各自把新出口补进 internalExits()
  */
 describe('M10 密封测试集', () => {
   let ctx: TestContext;
@@ -57,9 +59,20 @@ describe('M10 密封测试集', () => {
     return (await agent.get(`${roundUrl()}/responses`).expect(200)).body;
   }
 
-  /** 拿不到报价内容：报价详情、版本详情 403（没有 inquiry:evaluate 的管理员是 FORBIDDEN，其余 QUOTE_SEALED） */
+  /**
+   * 拿不到报价内容：报价详情、版本详情、比价矩阵与导出（M11）、议价线程 403（没有 inquiry:evaluate 的管理员是
+   * FORBIDDEN，其余 QUOTE_SEALED）
+   */
   async function expectQuoteSealed(agent: Agent, code = 'QUOTE_SEALED'): Promise<void> {
-    for (const url of [quoteUrl(0), `${quoteUrl(0)}/versions/1`, quoteUrl(1), `${quoteUrl(1)}/versions/1`]) {
+    for (const url of [
+      quoteUrl(0),
+      `${quoteUrl(0)}/versions/1`,
+      quoteUrl(1),
+      `${quoteUrl(1)}/versions/1`,
+      `${roundUrl()}/matrix`,
+      `${roundUrl()}/matrix/export`,
+      `/api/quotes/${p.quotes[0]}/negotiation`,
+    ]) {
       expect((await agent.get(url).expect(403)).body.code).toBe(code);
     }
     for (const suffix of ['content', 'content?disposition=attachment', 'meta']) {
@@ -180,7 +193,7 @@ describe('M10 密封测试集', () => {
     for (const e of emails) expectNoSecrets([e.subject, e.html, e.text], `email ${e.id}`);
   });
 
-  it('S-1 管理员给自己的角色加上 inquiry:evaluate 也只得到 QUOTE_SEALED', async () => {
+  it('S-1 管理员给自己的角色加上 inquiry:evaluate、inquiry:export 也只得到 QUOTE_SEALED', async () => {
     const roles: RoleDto[] = (await agents.admin.get('/api/system/roles').expect(200)).body;
     const role = roles.find((r) => r.code === 'ADMIN')!;
     const body = (permissions: string[]) => ({
@@ -193,7 +206,7 @@ describe('M10 密封测试集', () => {
     });
     await agents.admin
       .put(`/api/system/roles/${role.id}`)
-      .send(body([...role.permissions, 'inquiry:evaluate']))
+      .send(body([...role.permissions, 'inquiry:evaluate', 'inquiry:export']))
       .expect(200);
     try {
       await expectQuoteSealed(agents.admin);
@@ -212,6 +225,9 @@ describe('M10 密封测试集', () => {
       expect(detail.currentVersion).toMatchObject({ totalAmount: '6111.05', remark: '甲机密备注' });
       await agents.manager.get(`${quoteUrl(0)}/versions/1`).expect(200);
       await agents.manager.get(`/api/files/${attachmentId}/content`).expect(200);
+      const matrix: RoundMatrixDto = (await agents.manager.get(`${roundUrl()}/matrix`).expect(200)).body;
+      expect(matrix.suppliers.map((r) => r.totalAmount)).toEqual(['6111.05', '7777.70', null]);
+      await agents.manager.get(`${roundUrl()}/matrix/export`).expect(200);
       const list = await responses(agents.manager);
       expect(list.sealed).toBe(false);
       expect(list.items.map((i) => i.totalAmount)).toEqual(['6111.05', '7777.70', null]);
@@ -248,6 +264,14 @@ describe('M10 密封测试集', () => {
     const detail: RoundQuoteDetailDto = (await agents.buyer.get(quoteUrl(0)).expect(200)).body;
     expect(detail).toMatchObject({ status: 'EVALUATING', currentVersion: { remark: '甲机密备注' } });
     await agents.buyer.get(`/api/files/${attachmentId}/content`).expect(200);
+    const matrix: RoundMatrixDto = (await agents.buyer.get(`${roundUrl()}/matrix`).expect(200)).body;
+    expect(matrix.suppliers.map((r) => [r.supplier.code, r.totalAmount, r.lowestTotal])).toEqual([
+      ['TS-A', '6111.05', true],
+      ['TS-B', '7777.70', false],
+      ['TS-C', null, false],
+    ]);
+    await agents.buyer.get(`${roundUrl()}/matrix/export`).expect(200);
+    await agents.buyer.get(`/api/quotes/${p.quotes[0]}/negotiation`).expect(200);
     // 管理员没有 inquiry:evaluate、quote.amount：响应列表的合计被脱敏，报价详情与附件仍是 403
     const adminList = await responses(agents.admin);
     expect(adminList.sealed).toBe(false);
@@ -278,6 +302,8 @@ describe('M10 密封测试集', () => {
     expect((await agents.manager.get(`${url}/quotes/${never.quotes[0]}`).expect(403)).body.code).toBe(
       'QUOTE_SEALED',
     );
+    expect((await agents.manager.get(`${url}/matrix`).expect(403)).body.code).toBe('QUOTE_SEALED');
+    expect((await agents.manager.get(`${url}/matrix/export`).expect(403)).body.code).toBe('QUOTE_SEALED');
     const list: RoundResponsesDto = (await agents.manager.get(`${url}/responses`).expect(200)).body;
     expect(list).toMatchObject({ sealed: true, items: [{ status: 'VOID' }] });
     expect(list.items[0]).not.toHaveProperty('totalAmount');
@@ -288,5 +314,12 @@ describe('M10 密封测试集', () => {
     expect(opened.sealed).toBe(false);
     expect(opened.items[0]).toMatchObject({ status: 'VOID', totalAmount: '6111.05' });
     await agents.buyer.get(quoteUrl(0)).expect(200);
+    // R11-1 开标后才取消的轮次照样能看比价，但不能再入围
+    const matrix: RoundMatrixDto = (await agents.buyer.get(`${roundUrl()}/matrix`).expect(200)).body;
+    expect(matrix).toMatchObject({ roundStatus: 'CANCELLED', canShortlist: false });
+    expect(matrix.suppliers[0]).toMatchObject({ status: 'VOID', quoted: true, totalAmount: '6111.05' });
+    const cancelled = (await agents.buyer.get(`/api/inquiries/${p.inquiry.id}`).expect(200)).body;
+    expect(cancelled.allowedActions).toEqual(expect.arrayContaining(['evaluate', 'exportMatrix']));
+    expect(cancelled.allowedActions).not.toContain('shortlist');
   });
 });

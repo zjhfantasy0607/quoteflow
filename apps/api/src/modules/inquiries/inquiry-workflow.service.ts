@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   computeInquiryActions,
+  NEGOTIATION_AUTO_CLOSE,
   QUOTE_VOIDABLE_STATUSES,
   ROUND_TRANSITIONS,
   type ApproveInquiryInput,
@@ -20,6 +21,7 @@ import { AuditService } from '../../infra/audit/audit.service';
 import { MailService, userMailLanguage } from '../../infra/mail/mail.service';
 import { SequenceService } from '../../infra/sequences/sequence.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { closeOpenNegotiations } from '../negotiations/close-negotiations';
 import { InquiryAccessService } from './inquiry-access.service';
 import { InquiryNoticesService } from './inquiry-notices.service';
 import { InquiriesService } from './inquiries.service';
@@ -175,8 +177,8 @@ export class InquiryWorkflowService {
 
   /**
    * R06-9、R07-11、05 §1：原因必填；当前轮次评标完成后不能取消。当前轮次和变更草稿轮次一起取消，
-   * 这些轮次的报价单 → VOID；发布过的，给受邀且没有拒绝的供应商发 change.cancel（含取消原因）。
-   * 进行中的议价由 M11 在这里补充关闭
+   * 这些轮次的报价单 → VOID，进行中的议价关闭（系统 CLOSE 消息 AUTO_CLOSED_BY_CANCEL）；发布过的，
+   * 给受邀且没有拒绝的供应商发 change.cancel（含取消原因）
    */
   async cancel(user: AuthUser, id: string, input: CancelInquiryInput): Promise<InquiryDetailDto> {
     if (!input.reason) throw new AppException('INQUIRY_CANCEL_REASON_REQUIRED');
@@ -209,6 +211,13 @@ export class InquiryWorkflowService {
         where: { roundId: { in: roundIds }, status: { in: [...QUOTE_VOIDABLE_STATUSES] } },
         data: { status: 'VOID' },
       });
+      const closedNegotiations = await closeOpenNegotiations(
+        tx,
+        roundIds,
+        NEGOTIATION_AUTO_CLOSE.cancel,
+        user.id,
+        this.clock.now(),
+      );
       for (const round of rounds) await this.roundState.apply(tx, round.id, 'cancel');
       await this.notices.cancelled(tx, inquiry, notify, reason);
       await this.audit.log(
@@ -218,7 +227,7 @@ export class InquiryWorkflowService {
           entityType: 'inquiry',
           entityId: id,
           summary: inquiry.formalNo ?? inquiry.draftNo,
-          detail: { reason, voidedQuotes: voided.count },
+          detail: { reason, voidedQuotes: voided.count, closedNegotiations },
         },
         tx,
       );

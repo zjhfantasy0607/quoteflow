@@ -122,7 +122,7 @@ export class InquiriesService {
     if (!row) throw new AppException('NOT_FOUND');
     const round = await client.inquiryRound.findUniqueOrThrow({
       where: { inquiryId_roundNo: { inquiryId: id, roundNo: row.currentRoundNo } },
-      include: { _count: { select: { lines: true } } },
+      include: { _count: { select: { lines: true, quotes: { where: { shortlisted: true } } } } },
     });
     const approvedBy = row.approvedById
       ? await client.user.findUnique({ where: { id: row.approvedById }, select: { id: true, name: true } })
@@ -151,8 +151,12 @@ export class InquiriesService {
         openedAt: iso(round.openedAt),
         evaluatedAt: iso(round.evaluatedAt),
         lineCount: round._count.lines,
+        shortlistCount: round._count.quotes,
       },
-      allowedActions: computeInquiryActions(row, user.permissions),
+      allowedActions: computeInquiryActions(
+        { ...row, currentRoundOpenedAt: round.openedAt },
+        user.permissions,
+      ),
     };
   }
 

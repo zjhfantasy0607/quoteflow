@@ -57,6 +57,13 @@ const detailSelect = {
   currentVersionId: true,
   draftValues: true,
   draftUpdatedAt: true,
+  shortlisted: true,
+  negotiation: {
+    select: {
+      status: true,
+      messages: { select: { party: true, type: true }, orderBy: { seq: 'desc' }, take: 1 },
+    },
+  },
   round: {
     select: {
       roundNo: true,
@@ -146,7 +153,7 @@ export class PortalQuotesService {
 
   /**
    * 报价单详情（R08-7）：询价信息、轮次（含变更说明）、询价行与附件、我的报价状态；M09 起另有该轮冻结的模板、
-   * 草稿、当前版本和 allowedActions。
+   * 草稿、当前版本和 allowedActions；M11 起另有议价状态（议价线程走 /negotiation）。
    * R08-2：没作废的报价单第一次打开时写 firstViewedAt（采购方"供应商响应"里显示"已查看"），只写一次
    */
   async detail(user: AuthUser, quoteId: string): Promise<PortalQuoteDetailDto> {
@@ -229,8 +236,18 @@ export class PortalQuotesService {
         ? await loadVersion(this.prisma, { id: quote.currentVersionId })
         : null,
       versionCount: await this.prisma.quoteVersion.count({ where: { quoteId: quote.id } }),
+      negotiationStatus: quote.negotiation?.status ?? null,
       allowedActions: computePortalQuoteActions(
-        { quoteStatus: quote.status, roundStatus: round.status, deadline: round.deadline },
+        {
+          quoteStatus: quote.status,
+          roundStatus: round.status,
+          deadline: round.deadline,
+          negotiation: {
+            shortlisted: quote.shortlisted,
+            status: quote.negotiation?.status ?? null,
+            last: quote.negotiation?.messages[0] ?? null,
+          },
+        },
         this.clock.now(),
       ),
     };

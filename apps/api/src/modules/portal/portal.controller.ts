@@ -16,10 +16,13 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   declineQuoteSchema,
+  negotiationRespondSchema,
   portalQuoteListQuerySchema,
   quoteFormSchema,
   versionNoSchema,
   type DeclineQuoteInput,
+  type NegotiationRespondInput,
+  type NegotiationThreadDto,
   type Paginated,
   type PortalQuoteDetailDto,
   type PortalQuoteListItemDto,
@@ -35,13 +38,15 @@ import { CurrentUser, SupplierOnly } from '../../common/auth/decorators';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { IMPORT_HARD_LIMIT_BYTES, xlsxFile } from '../../infra/excel/excel-http';
 import type { UploadedFileInput } from '../../infra/files/files.service';
+import { NegotiationsModule } from '../negotiations/negotiations.controller';
+import { NegotiationsService } from '../negotiations/negotiations.service';
 import { PplModule } from '../ppl/ppl.controller';
 import { QuotesModule } from '../quotes/round-quotes.controller';
 import { PortalQuotesService } from './portal-quotes.service';
 import { QuoteSubmissionService } from './quote-submission.service';
 
 /**
- * 供应商门户（M08 §4、M09 §4）：整个 controller 只允许供应商，一律按当前用户的 supplierId 过滤（05 §7.2）。
+ * 供应商门户（M08 §4、M09 §4、M11 §4）：整个 controller 只允许供应商，一律按当前用户的 supplierId 过滤（05 §7.2）。
  * 附件预览 / 下载走 /api/files/:id/content（询价附件 InquiryFileResolver 按 P-3 判断并记日志，
  * 报价附件 QuoteAttachmentResolver 只给本供应商），改密码、改语言走 /api/auth/me/*
  */
@@ -51,6 +56,7 @@ export class PortalController {
   constructor(
     private readonly quotes: PortalQuotesService,
     private readonly submission: QuoteSubmissionService,
+    private readonly negotiations: NegotiationsService,
   ) {}
 
   @Get('quotes')
@@ -139,15 +145,34 @@ export class PortalController {
     return this.submission.importExcel(user, quoteId, file);
   }
 
+  /** M11：自己报价单的议价线程（不脱敏） */
+  @Get('quotes/:quoteId/negotiation')
+  negotiation(
+    @CurrentUser() user: AuthUser,
+    @Param('quoteId') quoteId: string,
+  ): Promise<NegotiationThreadDto> {
+    return this.negotiations.portalThread(user, quoteId);
+  }
+
+  /** M11、05 §5：回复采购方的目标价（接受 / 拒绝 / 反提案），返回最新的议价线程 */
+  @Post('quotes/:quoteId/negotiation/respond')
+  @HttpCode(200)
+  respondNegotiation(
+    @CurrentUser() user: AuthUser,
+    @Param('quoteId') quoteId: string,
+    @Body(new ZodValidationPipe(negotiationRespondSchema)) body: NegotiationRespondInput,
+  ): Promise<NegotiationThreadDto> {
+    return this.negotiations.respond(user, quoteId, body);
+  }
+
   @Get('profile')
   profile(@CurrentUser() user: AuthUser): Promise<SupplierProfileDto> {
     return this.quotes.profile(user);
   }
 }
 
-/** M11 在这里加议价回复 */
 @Module({
-  imports: [PplModule, QuotesModule],
+  imports: [PplModule, QuotesModule, NegotiationsModule],
   controllers: [PortalController],
   providers: [PortalQuotesService, QuoteSubmissionService],
 })

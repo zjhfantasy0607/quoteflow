@@ -312,14 +312,33 @@ describe('M08 供应商门户与隔离', () => {
       `/api/inquiries/${x.id}`,
       `/api/inquiries/${x.id}/rounds/1/responses`,
       `/api/inquiries/${x.id}/file-access-logs`,
+      `/api/inquiries/${x.id}/rounds/1/matrix`,
+      `/api/inquiries/${x.id}/rounds/1/matrix/export`,
+      `/api/quotes/${(await quoteOf(x.id, s.a)).id}/negotiation`,
       '/api/suppliers',
       '/api/system/users',
       '/api/system/emails',
     ]) {
       await portalA.get(path).expect(403);
     }
+    await portalA.put(`/api/inquiries/${x.id}/rounds/1/shortlist`).send({ quoteIds: [] }).expect(403);
     await buyer.get('/api/portal/quotes').expect(403);
     await buyer.get('/api/portal/profile').expect(403);
+  });
+
+  it('M11 议价接口同样隔离：别家的报价单 404，内部用户 403；门户的议价线程不含内部信息', async () => {
+    const quoteA = await quoteOf(x.id, s.a);
+    const url = `/api/portal/quotes/${quoteA.id}/negotiation`;
+    const res = await portalA.get(url).expect(200);
+    expect(res.body).toMatchObject({ quoteId: quoteA.id, status: null, messages: [], allowedActions: [] });
+    const keys = keysOf(res.body);
+    for (const key of FORBIDDEN_KEYS) expect(keys.has(key)).toBe(false);
+    for (const l of res.body.lines) expect(l).not.toHaveProperty('remark');
+    expect(JSON.stringify(res.body)).not.toContain(LINE_REMARK);
+    await portalB.get(url).expect(404);
+    await portalB.post(`${url}/respond`).send({ type: 'ACCEPT', replyToId: 'x' }).expect(404);
+    await buyer.get(url).expect(403);
+    await manager.post(`${url}/respond`).send({ type: 'ACCEPT', replyToId: 'x' }).expect(403);
   });
 
   it('M09 报价填报接口同样隔离：别家的报价单一律 404，内部用户 403；带草稿和版本的详情仍不含内部信息', async () => {
