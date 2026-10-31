@@ -218,3 +218,20 @@ export const awardRoundSchema = z.object({
   comment: optionalText(500),
 });
 export type AwardRoundInput = z.infer<typeof awardRoundSchema>;
+
+// ---------- 规格变更（M13） ----------
+
+/** 变更原因（"意见/原因"类，500）与主要变更内容（"说明"类，1000） */
+export const CHANGE_REASON_MAX = 500;
+export const CHANGE_SUMMARY_MAX = 1000;
+
+/**
+ * POST /api/inquiries/:id/rounds（新建变更轮次）、PUT .../rounds/:roundNo（保存变更说明，整体替换，没传的清空）：
+ * 发布前可以留空，发布时两项都必填（R13-3，ROUND_CHANGE_REASON_REQUIRED）
+ */
+export const changeRoundSchema = z.object({
+  changeReason: optionalText(CHANGE_REASON_MAX),
+  changeSummary: optionalText(CHANGE_SUMMARY_MAX),
+});
+export type ChangeRoundInput = z.infer<typeof changeRoundSchema>;
+export type ChangeRoundParams = z.input<typeof changeRoundSchema>;

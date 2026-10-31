@@ -7,6 +7,7 @@ import type {
 } from '../enums';
 import type { PortalQuoteAction } from '../inquiry-actions';
 import type { PplValues } from '../ppl/values';
+import type { RoundDiffDto } from '../round-diff';
 import type { InquiryFileKind } from '../schemas/inquiries';
 import type { QuoteDraftSource } from '../schemas/portal';
 import type { FileDto } from './infra';
@@ -102,8 +103,20 @@ export interface PortalQuoteDetailDto {
   versionCount: number;
   /** 议价状态（M11）：采购方发过议价才有，门户据此显示"议价"区 */
   negotiationStatus: NegotiationStatus | null;
+  /** 本供应商在这张询价单各轮的报价单（M13，按轮次号，含本张）：切换查看旧轮次（只读，P-4） */
+  rounds: PortalQuoteRoundDto[];
+  /** 第 2 轮起与上一轮的规格对比（不含询价行备注，P-5）；上一轮没有邀请本供应商时为 null（P-2） */
+  diff: RoundDiffDto | null;
   /** computePortalQuoteActions()：报价窗口外（已截止、作废）为空，轮到回复议价时有 respondNegotiation */
   allowedActions: PortalQuoteAction[];
+}
+
+/** 本供应商在同一询价单某一轮的报价单（M13） */
+export interface PortalQuoteRoundDto {
+  quoteId: string;
+  roundNo: number;
+  roundStatus: RoundStatus;
+  status: QuoteStatus;
 }
 
 /** 供应商草稿（R09-3、R09-8） */

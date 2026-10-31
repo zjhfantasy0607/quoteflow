@@ -1,6 +1,7 @@
 import { InquiryDocStatus, QuoteStatus, RoundStatus } from './enums';
 import { computeSupplierNegotiationActions, type NegotiationContext } from './negotiation';
 import type { PermissionCode } from './permissions';
+import { ROUND_TRANSITIONS } from './status';
 
 /** 询价单、轮次详情的 allowedActions（docs/03 §6）：前端只按它显示操作按钮 */
 export const INQUIRY_ACTIONS = [
@@ -20,6 +21,8 @@ export const INQUIRY_ACTIONS = [
   'shortlist',
   'award',
   'createChangeRound',
+  'editChangeRound',
+  'discardChangeRound',
   'exportMatrix',
   'viewAccessLog',
 ] as const;
@@ -42,7 +45,12 @@ export interface InquiryActionContext {
   currentRoundStatus: RoundStatus;
   /** 当前轮次的开标时间：开标后才被取消的轮次仍可查看比价（R11-1）；不传按未开标处理 */
   currentRoundOpenedAt?: Date | string | null;
+  /** 未发布的变更轮次（DRAFT，第 N 轮）的轮次号（M13，05 §3 最多一个）；不传按没有处理 */
+  draftRoundNo?: number | null;
 }
+
+/** 05 §3：可以发起、发布规格变更的当前轮次状态（新一轮发布时它被作废，与 supersede 的来源状态一致） */
+export const CHANGEABLE_ROUND_STATUSES: readonly RoundStatus[] = ROUND_TRANSITIONS.supersede.from;
 
 /** 后端传 AuthUser.permissions（Set），测试里也可以直接 new Set([...]) */
 export interface PermissionChecker {
@@ -71,14 +79,15 @@ function firstRoundUnpublished(ctx: InquiryActionContext): boolean {
 }
 
 /**
- * I-4：第 1 轮的询价行和附件只在询价单为草稿时可以编辑（提交审批后冻结）。
- * 第 N 轮（规格变更）的编辑条件由 M13 补充。
+ * I-4：轮次发布后询价行和附件不能再改。第 1 轮只在询价单为草稿时可以编辑（提交审批后冻结）；
+ * 第 N 轮（规格变更草稿）在询价单已通过时按 M06 的规则编辑（R13-2）
  */
 export function isRoundEditable(
   docStatus: InquiryDocStatus,
   round: { roundNo: number; status: RoundStatus },
 ): boolean {
-  return round.roundNo === 1 && round.status === RoundStatus.DRAFT && docStatus === InquiryDocStatus.DRAFT;
+  if (round.status !== RoundStatus.DRAFT) return false;
+  return round.roundNo === 1 ? docStatus === InquiryDocStatus.DRAFT : docStatus === InquiryDocStatus.APPROVED;
 }
 
 /**
@@ -87,8 +96,8 @@ export function isRoundEditable(
  * 轮次类动作（发布、补充邀请、催报、延期）都针对当前轮次。
  * M06 覆盖 edit、submit、approve、reject、发布前的 cancel；M07 覆盖 editInvitees、publish、lateInvite、
  * remind、extendDeadline 和发布后的 cancel；M08 覆盖 viewAccessLog；M10 覆盖 closeEarly、open；
- * M11 覆盖 evaluate、shortlist、exportMatrix；M12 覆盖 award。询价完成或取消后只剩查看类动作（R12-8）；
- * 其余动作由 M13 补充。
+ * M11 覆盖 evaluate、shortlist、exportMatrix；M12 覆盖 award；M13 覆盖 createChangeRound 与变更草稿期间的
+ * editInvitees（变更草稿本身的动作见 computeChangeRoundActions()）。询价完成或取消后只剩查看类动作（R12-8）。
  */
 export function computeInquiryActions(ctx: InquiryActionContext, perms: PermissionChecker): InquiryAction[] {
   const can = (code: PermissionCode) => perms.has(code);
@@ -97,14 +106,17 @@ export function computeInquiryActions(ctx: InquiryActionContext, perms: Permissi
   const approved = ctx.docStatus === InquiryDocStatus.APPROVED;
   const unpublished = firstRoundUnpublished(ctx);
   const round = ctx.currentRoundStatus;
+  const changeable = approved && CHANGEABLE_ROUND_STATUSES.includes(round);
+  const hasDraftRound = !!ctx.draftRoundNo;
 
   // 编辑页包含表头、询价行（inquiry:create）和附件（inquiry:spec），有其一即可进入
   if (draft && unpublished && (can('inquiry:create') || can('inquiry:spec'))) actions.push('edit');
   if (draft && can('inquiry:submit')) actions.push('submit');
   if (ctx.docStatus === InquiryDocStatus.PENDING_APPROVAL && can('inquiry:approve'))
     actions.push('approve', 'reject');
-  // R07-2：第 1 轮发布前（草稿或已通过，待审批时不能改）可以维护受邀名单；变更轮次草稿期间的维护由 M13 补充
-  if ((draft || approved) && unpublished && can('inquiry:invite')) actions.push('editInvitees');
+  // R07-2：第 1 轮发布前（草稿或已通过，待审批时不能改）可以维护受邀名单；05 §3：有变更草稿时也能维护（只影响下一轮）
+  if ((((draft || approved) && unpublished) || (changeable && hasDraftRound)) && can('inquiry:invite'))
+    actions.push('editInvitees');
   // R07-3：审批通过后才能发布
   if (approved && unpublished && can('inquiry:publish')) actions.push('publish');
   // R07-7、R07-8：补充邀请、催报只在等待报价时
@@ -127,8 +139,12 @@ export function computeInquiryActions(ctx: InquiryActionContext, perms: Permissi
   }
   // R11-6：入围只在评标中（OPENED）
   if (approved && round === RoundStatus.OPENED && can('inquiry:evaluate')) actions.push('shortlist');
-  // R12-1：定标只在评标中（OPENED）；中标报价必须是评标中，由接口复核（AWARD_INVALID_QUOTE）
-  if (approved && round === RoundStatus.OPENED && can('inquiry:award')) actions.push('award');
+  // R12-1：定标只在评标中（OPENED）；中标报价必须是评标中，由接口复核（AWARD_INVALID_QUOTE）。
+  // 有变更草稿时先发布或放弃变更再定标（B-52，接口报 ROUND_DRAFT_EXISTS）
+  if (approved && round === RoundStatus.OPENED && !hasDraftRound && can('inquiry:award'))
+    actions.push('award');
+  // R13-1：等待报价、报价完成、开标中可以发起规格变更，同时只能有一个变更草稿
+  if (changeable && !hasDraftRound && can('inquiry:changeSpec')) actions.push('createChangeRound');
   // R06-9、R07-11：没取消、当前轮次还没评标完成都能取消
   const cancellable: InquiryDocStatus[] = [
     InquiryDocStatus.DRAFT,
@@ -139,6 +155,30 @@ export function computeInquiryActions(ctx: InquiryActionContext, perms: Permissi
     actions.push('cancel');
   // R08-4：规格下载日志，任何状态都能看（内部用户的访问也记录）
   if (can('inquiry:accessLog')) actions.push('viewAccessLog');
+  return actions;
+}
+
+/**
+ * 变更草稿轮次（DRAFT，第 N 轮）的 allowedActions（M13 R13-2、R13-3、R13-7）：只在询价单已通过、当前轮次可以被作废
+ * （等待报价、报价完成、开标中）时有。edit = 询价行与附件可编辑（inquiry:create / inquiry:spec，按 M06 的规则）；
+ * editInvitees = 维护受邀名单（只影响新一轮）；publish = "采购确认"发布新一轮；editChangeRound / discardChangeRound =
+ * 保存变更说明、放弃变更（inquiry:changeSpec）
+ */
+export function computeChangeRoundActions(
+  ctx: InquiryActionContext,
+  perms: PermissionChecker,
+): InquiryAction[] {
+  const can = (code: PermissionCode) => perms.has(code);
+  if (
+    ctx.docStatus !== InquiryDocStatus.APPROVED ||
+    !CHANGEABLE_ROUND_STATUSES.includes(ctx.currentRoundStatus)
+  )
+    return [];
+  const actions: InquiryAction[] = [];
+  if (can('inquiry:create') || can('inquiry:spec')) actions.push('edit');
+  if (can('inquiry:invite')) actions.push('editInvitees');
+  if (can('inquiry:publish')) actions.push('publish');
+  if (can('inquiry:changeSpec')) actions.push('editChangeRound', 'discardChangeRound');
   return actions;
 }
 

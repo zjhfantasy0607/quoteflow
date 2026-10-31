@@ -72,6 +72,8 @@ export interface InquiryDetailDto extends InquiryListItemDto {
   completedAt: string | null;
   updatedAt: string;
   currentRound: InquiryRoundSummaryDto;
+  /** 未发布的变更轮次（M13）：有时详情页显示"变更草稿（第 N 轮）"提示，不影响显示状态（05 §2） */
+  draftRoundNo: number | null;
   /** 定标结果（M12）：当前轮次评标完成后才有，详情页顶部的完成横幅用它 */
   award: InquiryAwardDto | null;
   allowedActions: InquiryAction[];
@@ -141,6 +143,27 @@ export interface InquiryRoundDto {
   files: InquiryFileDto[];
   /** 含 edit 表示本轮的询价行和附件可以编辑 */
   allowedActions: InquiryAction[];
+}
+
+/** GET /api/inquiries/:id/rounds 的一项（M13）：按轮次号排序，详情页的轮次页签条用它 */
+export interface InquiryRoundBriefDto {
+  id: string;
+  roundNo: number;
+  status: RoundStatus;
+  deadline: string | null;
+  publishedAt: string | null;
+  /** 开过标的旧轮次仍可查看报价和比价（R13-5） */
+  openedAt: string | null;
+  evaluatedAt: string | null;
+  /** 第 2 轮起：变更原因与主要变更内容 */
+  changeReason: string | null;
+  changeSummary: string | null;
+  lineCount: number;
+  /** 报价单数（本轮受邀家数） */
+  quoteCount: number;
+  /** 入围家数（有入围时详情页显示"议价"页签） */
+  shortlistCount: number;
+  createdAt: string;
 }
 
 /** 审批记录（R06-12） */

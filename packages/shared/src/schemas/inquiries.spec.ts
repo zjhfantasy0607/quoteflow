@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  computeChangeRoundActions,
   computeInquiryActions,
   isInquiryReadonly,
   isRoundEditable,
@@ -9,6 +10,7 @@ import { PRESET_ROLES } from '../roles';
 import { ROUND_TERMINAL_STATUSES, ROUND_TRANSITIONS } from '../status';
 import {
   awardRoundSchema,
+  changeRoundSchema,
   copyLineFilesSchema,
   createInquirySchema,
   createLineSchema,
@@ -155,27 +157,33 @@ describe('allowedActions（03 §6）', () => {
     expect(stateActions(ctx('APPROVED'), 'PURCHASE_MANAGER')).toEqual(['editInvitees', 'publish', 'cancel']);
   });
 
-  it('R07-7、R07-8、R07-10 等待报价：补充邀请、催报、延期；名单只读，不能再发布', () => {
-    expect(stateActions(ctx('APPROVED', 'WAITING_QUOTES'), 'PD')).toEqual([]);
+  it('R07-7、R07-8、R07-10 等待报价：补充邀请、催报、延期；名单只读，不能再发布（M13 起可以发起规格变更）', () => {
+    expect(stateActions(ctx('APPROVED', 'WAITING_QUOTES'), 'PD')).toEqual(['createChangeRound']);
     expect(stateActions(ctx('APPROVED', 'WAITING_QUOTES'), 'BUYER')).toEqual([
       'lateInvite',
       'remind',
       'extendDeadline',
+      'createChangeRound',
     ]);
     expect(stateActions(ctx('APPROVED', 'WAITING_QUOTES'), 'PURCHASE_MANAGER')).toEqual([
       'lateInvite',
       'remind',
       'extendDeadline',
       'closeEarly',
+      'createChangeRound',
       'cancel',
     ]);
   });
 
   it('R07-10 R10-3 报价完成后只能延期、开标（和取消），不能补充邀请、催报', () => {
-    expect(stateActions(ctx('APPROVED', 'QUOTES_CLOSED'), 'BUYER')).toEqual(['extendDeadline']);
+    expect(stateActions(ctx('APPROVED', 'QUOTES_CLOSED'), 'BUYER')).toEqual([
+      'extendDeadline',
+      'createChangeRound',
+    ]);
     expect(stateActions(ctx('APPROVED', 'QUOTES_CLOSED'), 'PURCHASE_MANAGER')).toEqual([
       'extendDeadline',
       'open',
+      'createChangeRound',
       'cancel',
     ]);
   });
@@ -308,5 +316,71 @@ describe('M12 定标与只读', () => {
     expect(awardRoundSchema.parse({ quoteId: 'q1', comment: ' 价格最低 ' }).comment).toBe('价格最低');
     expect(awardRoundSchema.safeParse({}).success).toBe(false);
     expect(awardRoundSchema.safeParse({ quoteId: 'q1', comment: 'x'.repeat(501) }).success).toBe(false);
+  });
+});
+
+describe('M13 规格变更', () => {
+  const rounds = ['DRAFT', 'WAITING_QUOTES', 'QUOTES_CLOSED', 'OPENED', 'EVALUATED'] as const;
+  const withDraft = (round: (typeof rounds)[number], draftRoundNo: number | null) => ({
+    ...ctx('APPROVED', round),
+    draftRoundNo,
+  });
+
+  it('R13-1 等待报价、报价完成、开标中可以发起变更（inquiry:changeSpec）；已有变更草稿时不能再发起', () => {
+    const has = (round: (typeof rounds)[number], role: string, draft: number | null = null) =>
+      computeInquiryActions(withDraft(round, draft), perms(role)).includes('createChangeRound');
+    expect(rounds.filter((r) => has(r, 'BUYER'))).toEqual(['WAITING_QUOTES', 'QUOTES_CLOSED', 'OPENED']);
+    expect(rounds.filter((r) => has(r, 'PD'))).toEqual(['WAITING_QUOTES', 'QUOTES_CLOSED', 'OPENED']);
+    expect(rounds.some((r) => has(r, 'CONTRACT_APPROVER'))).toBe(false);
+    expect(has('WAITING_QUOTES', 'BUYER', 2)).toBe(false);
+    expect(computeInquiryActions(ctx('DRAFT'), perms('BUYER'))).not.toContain('createChangeRound');
+    expect(computeInquiryActions(ctx('CANCELLED', 'OPENED'), perms('BUYER'))).not.toContain(
+      'createChangeRound',
+    );
+  });
+
+  it('05 §3 有变更草稿时可以维护受邀名单（只影响下一轮）；B-52 有变更草稿时不能定标', () => {
+    const buyer = (draft: number | null) =>
+      computeInquiryActions(withDraft('WAITING_QUOTES', draft), perms('BUYER'));
+    expect(buyer(null)).not.toContain('editInvitees');
+    expect(buyer(2)).toContain('editInvitees');
+    const manager = (draft: number | null) =>
+      computeInquiryActions(withDraft('OPENED', draft), perms('PURCHASE_MANAGER'));
+    expect(manager(null)).toContain('award');
+    expect(manager(2)).not.toContain('award');
+  });
+
+  it('R13-2 R13-3 R13-7 变更草稿的动作：采购员全有；PD 能改行、附件和变更说明，不能发布、改名单；询价完成后没有', () => {
+    expect(computeChangeRoundActions(ctx('APPROVED', 'WAITING_QUOTES'), perms('BUYER'))).toEqual([
+      'edit',
+      'editInvitees',
+      'publish',
+      'editChangeRound',
+      'discardChangeRound',
+    ]);
+    expect(computeChangeRoundActions(ctx('APPROVED', 'OPENED'), perms('PD'))).toEqual([
+      'edit',
+      'editChangeRound',
+      'discardChangeRound',
+    ]);
+    expect(computeChangeRoundActions(ctx('APPROVED', 'EVALUATED'), perms('BUYER'))).toEqual([]);
+    expect(computeChangeRoundActions(ctx('CANCELLED', 'CANCELLED'), perms('BUYER'))).toEqual([]);
+  });
+
+  it('R13-2 变更草稿（第 N 轮）在询价单已通过时可以编辑；发布后、作废后都不能', () => {
+    expect(isRoundEditable('APPROVED', { roundNo: 2, status: 'DRAFT' })).toBe(true);
+    expect(isRoundEditable('DRAFT', { roundNo: 2, status: 'DRAFT' })).toBe(false);
+    expect(isRoundEditable('APPROVED', { roundNo: 2, status: 'WAITING_QUOTES' })).toBe(false);
+    expect(isRoundEditable('APPROVED', { roundNo: 1, status: 'SUPERSEDED' })).toBe(false);
+  });
+
+  it('变更说明可以留空（发布时才必填）；原因最多 500、内容最多 1000', () => {
+    expect(changeRoundSchema.parse({})).toEqual({ changeReason: undefined, changeSummary: undefined });
+    expect(changeRoundSchema.parse({ changeReason: ' Ra80 → Ra90 ', changeSummary: '' })).toEqual({
+      changeReason: 'Ra80 → Ra90',
+      changeSummary: undefined,
+    });
+    expect(changeRoundSchema.safeParse({ changeReason: 'x'.repeat(501) }).success).toBe(false);
+    expect(changeRoundSchema.safeParse({ changeSummary: 'x'.repeat(1001) }).success).toBe(false);
   });
 });
