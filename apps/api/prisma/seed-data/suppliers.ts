@@ -14,6 +14,9 @@ interface SeedSupplier {
   contactEmail: string;
   contactPhone: string;
   creditCode: string | null;
+  /** 国家或地区、地址是虚构的（待确认事项 A-25） */
+  country: string;
+  address: string;
   enabled: boolean;
   /** 有门户账号（用联系邮箱登录，直接设为启用，跳过激活） */
   account: boolean;
@@ -31,6 +34,8 @@ export const SEED_SUPPLIERS: SeedSupplier[] = [
     contactEmail: 'sales@huaxin.example.com',
     contactPhone: '0755-8888 0001',
     creditCode: '91440300MA5HX00001',
+    country: '中国',
+    address: '广东省深圳市宝安区福永街道示例工业区 A3 栋',
     enabled: true,
     account: true,
   },
@@ -45,6 +50,8 @@ export const SEED_SUPPLIERS: SeedSupplier[] = [
     contactEmail: 'bd@zhuoyue.example.com',
     contactPhone: '021-6666 0002',
     creditCode: '91310000MA1ZY00002',
+    country: '中国',
+    address: '上海市松江区九亭镇示例路 168 号',
     enabled: true,
     account: true,
   },
@@ -59,6 +66,8 @@ export const SEED_SUPPLIERS: SeedSupplier[] = [
     contactEmail: 'sales@xinneng.example.com',
     contactPhone: '025-5555 0003',
     creditCode: '91320000MA1XN00003',
+    country: '中国',
+    address: '江苏省南京市江宁区秣陵街道示例路 66 号',
     enabled: true,
     account: true,
   },
@@ -73,6 +82,8 @@ export const SEED_SUPPLIERS: SeedSupplier[] = [
     contactEmail: 'info@jinggong.example.com',
     contactPhone: '0571-7777 0004',
     creditCode: '91330000MA2JG00004',
+    country: '中国',
+    address: '浙江省杭州市余杭区仁和街道示例工业园 18 号',
     enabled: true,
     account: true,
   },
@@ -87,6 +98,8 @@ export const SEED_SUPPLIERS: SeedSupplier[] = [
     contactEmail: 'sales@lianchuang.example.com',
     contactPhone: '020-3333 0005',
     creditCode: '91440100MA5LC00005',
+    country: '中国',
+    address: '广东省广州市番禺区石碁镇示例路 9 号',
     enabled: true,
     account: true,
   },
@@ -101,6 +114,8 @@ export const SEED_SUPPLIERS: SeedSupplier[] = [
     contactEmail: 'kevin@brightsource.example.com',
     contactPhone: '+852 2888 0006',
     creditCode: null,
+    country: 'Hong Kong, China',
+    address: 'Room 1802, 18/F, Example Centre, 88 Example Road, Kwun Tong, Kowloon, Hong Kong',
     enabled: true,
     account: true,
   },
@@ -115,6 +130,8 @@ export const SEED_SUPPLIERS: SeedSupplier[] = [
     contactEmail: 'sales@haina.example.com',
     contactPhone: '0531-2222 0007',
     creditCode: '91370000MA3HN00007',
+    country: '中国',
+    address: '山东省济南市历城区示例路 2008 号',
     enabled: false,
     account: false,
   },
@@ -129,6 +146,8 @@ export const SEED_SUPPLIERS: SeedSupplier[] = [
     contactEmail: 'erik@nordicdriver.example.com',
     contactPhone: '+46 8 555 0008',
     creditCode: null,
+    country: 'Sweden',
+    address: 'Examplegatan 12, 111 43 Stockholm, Sweden',
     // 没有门户账号，用来演示"开通门户账号"
     enabled: true,
     account: false,
@@ -153,6 +172,8 @@ export async function seedSuppliers(
         nameZh: s.nameZh,
         nameEn: s.nameEn,
         creditCode: s.creditCode,
+        country: s.country,
+        address: s.address,
         categoryCode: s.categoryCode,
         contactName: s.contactName,
         contactEmail: s.contactEmail,
@@ -165,6 +186,15 @@ export async function seedSuppliers(
         },
       },
       update: {},
+    });
+    // 已有的供应商只补空着的国家或地区、地址，不覆盖管理员改过的内容
+    await prisma.supplier.updateMany({
+      where: { id: supplier.id, country: null },
+      data: { country: s.country },
+    });
+    await prisma.supplier.updateMany({
+      where: { id: supplier.id, address: null },
+      data: { address: s.address },
     });
     if (!s.account) continue;
     const exists = await prisma.user.findUnique({ where: { username: s.contactEmail } });

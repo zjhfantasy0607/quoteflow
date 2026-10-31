@@ -151,31 +151,59 @@ export async function seedDicts(prisma: PrismaClient): Promise<void> {
   }
 }
 
+/** 电话是虚构的（待确认事项 A-25） */
 export const INTERNAL_USERS: {
   username: string;
   name: string;
   role: string;
   department: string;
   email: string;
+  phone: string;
   locale: 'zh-CN' | 'en-US';
 }[] = [
-  { username: 'admin', name: '系统管理员', role: 'ADMIN', department: 'IT', email: 'admin@example.com', locale: 'zh-CN' },
-  { username: 'pd.wang', name: '王工', role: 'PD', department: 'PRODUCT', email: 'pd.wang@example.com', locale: 'zh-CN' },
+  {
+    username: 'admin',
+    name: '系统管理员',
+    role: 'ADMIN',
+    department: 'IT',
+    email: 'admin@example.com',
+    phone: '0755-2799 8801',
+    locale: 'zh-CN',
+  },
+  {
+    username: 'pd.wang',
+    name: '王工',
+    role: 'PD',
+    department: 'PRODUCT',
+    email: 'pd.wang@example.com',
+    phone: '0755-2799 8802',
+    locale: 'zh-CN',
+  },
   {
     username: 'buyer.zhang',
     name: '张三',
     role: 'BUYER',
     department: 'PURCHASE',
     email: 'buyer.zhang@example.com',
+    phone: '0755-2799 8803',
     locale: 'zh-CN',
   },
-  { username: 'buyer.li', name: '李四', role: 'BUYER', department: 'PURCHASE', email: 'buyer.li@example.com', locale: 'en-US' },
+  {
+    username: 'buyer.li',
+    name: '李四',
+    role: 'BUYER',
+    department: 'PURCHASE',
+    email: 'buyer.li@example.com',
+    phone: '0755-2799 8804',
+    locale: 'en-US',
+  },
   {
     username: 'manager.zhang',
     name: '张伟',
     role: 'PURCHASE_MANAGER',
     department: 'PURCHASE',
     email: 'manager.zhang@example.com',
+    phone: '0755-2799 8805',
     locale: 'zh-CN',
   },
   {
@@ -184,6 +212,7 @@ export const INTERNAL_USERS: {
     role: 'CONTRACT_APPROVER',
     department: 'GM',
     email: 'approver.zhao@example.com',
+    phone: '0755-2799 8806',
     locale: 'zh-CN',
   },
 ];
@@ -195,7 +224,11 @@ export async function seedInternalUsers(
   const passwordHash = await hashPassword(DEV_PASSWORD);
   for (const u of INTERNAL_USERS) {
     const exists = await prisma.user.findUnique({ where: { username: u.username } });
-    if (exists) continue;
+    if (exists) {
+      // 已有的账号只补空着的电话，不覆盖管理员改过的内容
+      await prisma.user.updateMany({ where: { id: exists.id, phone: null }, data: { phone: u.phone } });
+      continue;
+    }
     const role = await prisma.role.findUniqueOrThrow({ where: { code: u.role } });
     await prisma.user.create({
       data: {
@@ -203,6 +236,7 @@ export async function seedInternalUsers(
         passwordHash,
         name: u.name,
         email: u.email,
+        phone: u.phone,
         departmentCode: u.department,
         locale: u.locale,
         userType: 'INTERNAL',

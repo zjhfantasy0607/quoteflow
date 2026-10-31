@@ -154,8 +154,8 @@ describe('M04 供应商 Excel 导入导出', () => {
       'bd@zhuoyue.example.com',
       '021-6666 0002',
       '中英',
-      null,
-      null,
+      '中国',
+      '上海市松江区九亭镇示例路 168 号',
       null,
       '启用',
     ]);

@@ -10,7 +10,13 @@ export const SYSTEM_PARAMS = {
       address: z.string().trim().max(200),
       phone: z.string().trim().max(50),
     }),
-    defaultValue: { nameZh: '示例照明科技有限公司', nameEn: 'Example Lighting Co., Ltd.', address: '', phone: '' },
+    // 客户给出真实公司信息前用虚构数据（待确认事项 A-25）
+    defaultValue: {
+      nameZh: '示例照明科技有限公司',
+      nameEn: 'Example Lighting Co., Ltd.',
+      address: '广东省深圳市宝安区福永街道示例工业园 1 栋',
+      phone: '0755-2799 8800',
+    },
     descZh: '公司信息，显示在邮件抬头和供应商门户',
     descEn: 'Company profile shown in email headers and the supplier portal',
   },
