@@ -589,8 +589,9 @@ describe('M11 议价', () => {
     expect((await thread(buyer, 'b')).messages).toHaveLength(3);
     const logs: AuditLogDto[] = (await buyer.get(`/api/inquiries/${p.inquiry.id}/timeline`).expect(200)).body;
     expect(logs.find((l) => l.action === 'inquiry.cancel')?.detail).toMatchObject({ closedNegotiations: 1 });
+    // R12-8：询价取消后议价同样只读
     expect(
       (await respond('a', { type: 'ACCEPT', replyToId: a.messages.at(-1)!.id }).expect(409)).body.code,
-    ).toBe('NEGOTIATION_CLOSED');
+    ).toBe('INQUIRY_COMPLETED_READONLY');
   });
 });

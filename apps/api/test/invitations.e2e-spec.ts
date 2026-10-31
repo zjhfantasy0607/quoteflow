@@ -795,7 +795,7 @@ describe('M07 邀请发布与邮件通知', () => {
         .post(`${base(detail.id)}/rounds/1/remind`)
         .send({ quoteIds: [zhQuote.id] })
         .expect(409);
-      expect(again.body.code).toBe('INQUIRY_INVALID_STATUS');
+      expect(again.body.code).toBe('INQUIRY_COMPLETED_READONLY');
     });
 
     it('R07-11 发布前取消不发邮件；当前轮次评标完成后不能取消', async () => {
@@ -822,7 +822,8 @@ describe('M07 邀请发布与邮件通知', () => {
         .post(`${base(detail.id)}/cancel`)
         .send({ reason: '晚了' })
         .expect(409);
-      expect(res.body.code).toBe('INQUIRY_INVALID_STATUS');
+      // R12-8：评标完成后整单只读
+      expect(res.body.code).toBe('INQUIRY_COMPLETED_READONLY');
     });
   });
 

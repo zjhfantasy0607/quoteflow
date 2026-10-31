@@ -14,7 +14,7 @@ type NoticeInquiry = Pick<Inquiry, 'id' | 'formalNo' | 'title' | 'ownerId'>;
 
 /**
  * 发给受邀供应商的询价通知（M07）：收件人是联系邮箱、抄送抄送邮箱，语言按首选语言（R07-5）；
- * 只带正式询价号和标题，不含项目号、其他供应商和金额。M11 的议价通知也在这里（发给负责人的按其账号语言）。
+ * 只带正式询价号和标题，不含项目号、其他供应商和金额。M11 的议价通知（发给负责人的按其账号语言）、M12 的定标通知也在这里。
  * 都在调用方的事务里入队（I-10）
  */
 @Injectable()
@@ -163,6 +163,28 @@ export class InquiryNoticesService {
         audience: 'BUYER',
       },
     });
+  }
+
+  /** R12-6 定标：中标方一封 award；同一张报价单只发一次 */
+  async award(tx: Prisma.TransactionClient, inquiry: NoticeInquiry, q: NoticeQuote): Promise<void> {
+    const buyer = await this.buyer(tx, inquiry);
+    await this.mail.enqueue(tx, {
+      ...this.envelope(inquiry, q, `AWARD:${q.id}`),
+      templateKey: 'award',
+      data: { ...this.base(inquiry, q, buyer), link: this.link(q) },
+    });
+  }
+
+  /** R12-6 定标：未中标（LOST）的各一封 result，不透露中标方和价格；同一张报价单只发一次 */
+  async result(tx: Prisma.TransactionClient, inquiry: NoticeInquiry, quotes: NoticeQuote[]): Promise<void> {
+    const buyer = await this.buyer(tx, inquiry);
+    for (const q of quotes) {
+      await this.mail.enqueue(tx, {
+        ...this.envelope(inquiry, q, `RESULT:${q.id}`),
+        templateKey: 'result',
+        data: { ...this.base(inquiry, q, buyer), link: this.link(q) },
+      });
+    }
   }
 
   private owner(tx: Prisma.TransactionClient, inquiry: NoticeInquiry) {

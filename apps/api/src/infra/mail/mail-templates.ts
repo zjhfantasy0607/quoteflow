@@ -45,6 +45,8 @@ export interface MailTemplateDataMap {
   'negotiation.agreed':
     | (SupplierNotice & { audience: 'SUPPLIER'; link: string })
     | (NegotiationBuyerNotice & { audience: 'BUYER' });
+  award: SupplierNotice & { link: string };
+  result: SupplierNotice & { link: string };
 }
 
 /** 发给询价负责人的议价通知（M11）：内部邮件也不写金额和议价内容（管理员能在邮件记录里看到正文） */
@@ -454,6 +456,76 @@ View negotiation: ${d.link}`,
   },
 };
 
+/** 定标（R12-6）：发给中标方，不含金额和其他供应商的信息 */
+const award: MailTemplate<MailTemplateDataMap['award']> = {
+  type: 'AWARD',
+  render(lang, d) {
+    const n = notice(lang, d);
+    const { formalNo, title } = d.inquiry;
+    if (lang === 'zh-CN') {
+      const message = `恭喜！经评审，${n.supplier}在询价 ${formalNo}（${title}）中中标。我们的采购人员将尽快与贵司联系合同签订等后续事宜。`;
+      return {
+        subject: `中标通知：${formalNo} ${title}`,
+        body: `${n.hello}<p>${esc(message)}</p>${button(d.link, '查看我的报价')}${n.contact}`,
+        text: `${n.helloText}
+
+${message}
+
+查看我的报价：${d.link}
+
+${n.contactText}`,
+      };
+    }
+    const message = `Congratulations! After evaluation, ${n.supplier} has been awarded RFQ ${formalNo} (${title}). Our purchasing team will contact you shortly about the contract and next steps.`;
+    return {
+      subject: `Award notice: ${formalNo} ${title}`,
+      body: `${n.hello}<p>${esc(message)}</p>${button(d.link, 'View my quotation')}${n.contact}`,
+      text: `${n.helloText}
+
+${message}
+
+View my quotation: ${d.link}
+
+${n.contactText}`,
+    };
+  },
+};
+
+/** 定标结果（R12-6）：notify.sendResultToLosers 打开时发给未中标的供应商，礼貌告知未中标，不透露中标方和价格 */
+const result: MailTemplate<MailTemplateDataMap['result']> = {
+  type: 'RESULT',
+  render(lang, d) {
+    const n = notice(lang, d);
+    const { formalNo, title } = d.inquiry;
+    if (lang === 'zh-CN') {
+      const message = `感谢${n.supplier}参与询价 ${formalNo}（${title}）。经综合评审，本次未能选用贵司的报价。感谢贵司的支持，期待今后继续合作。`;
+      return {
+        subject: `询价结果通知：${formalNo} ${title}`,
+        body: `${n.hello}<p>${esc(message)}</p>${button(d.link, '查看我的报价')}${n.contact}`,
+        text: `${n.helloText}
+
+${message}
+
+查看我的报价：${d.link}
+
+${n.contactText}`,
+      };
+    }
+    const message = `Thank you for taking part in RFQ ${formalNo} (${title}). After careful evaluation, we regret to inform you that the quotation from ${n.supplier} was not selected this time. We appreciate your support and look forward to working with you in the future.`;
+    return {
+      subject: `RFQ result: ${formalNo} ${title}`,
+      body: `${n.hello}<p>${esc(message)}</p>${button(d.link, 'View my quotation')}${n.contact}`,
+      text: `${n.helloText}
+
+${message}
+
+View my quotation: ${d.link}
+
+${n.contactText}`,
+    };
+  },
+};
+
 export const MAIL_TEMPLATES: { [K in MailTemplateKey]: MailTemplate<MailTemplateDataMap[K]> } = {
   'account.resetPassword': resetPassword,
   'account.activate': activate,
@@ -467,4 +539,6 @@ export const MAIL_TEMPLATES: { [K in MailTemplateKey]: MailTemplate<MailTemplate
   'negotiation.toSupplier': negotiationToSupplier,
   'negotiation.toBuyer': negotiationToBuyer,
   'negotiation.agreed': negotiationAgreed,
+  award,
+  result,
 };

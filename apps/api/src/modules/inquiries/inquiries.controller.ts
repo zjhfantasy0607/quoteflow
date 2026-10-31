@@ -18,6 +18,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import {
   approveInquirySchema,
   attachInquiryFileSchema,
+  awardRoundSchema,
   cancelInquirySchema,
   copyLineFilesSchema,
   createInquirySchema,
@@ -38,6 +39,7 @@ import {
   updateLineSchema,
   type ApproveInquiryInput,
   type AttachInquiryFileInput,
+  type AwardRoundInput,
   type AuditLogDto,
   type CancelInquiryInput,
   type CopyLineFilesInput,
@@ -76,6 +78,7 @@ import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { IMPORT_HARD_LIMIT_BYTES, xlsxFile } from '../../infra/excel/excel-http';
 import type { UploadedFileInput } from '../../infra/files/files.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ContractsModule } from '../contracts/contract-draft.factory';
 import { MaterialCategoriesModule } from '../material-categories/material-categories.controller';
 import { MaterialsModule } from '../materials/materials.controller';
 import { PointsModule } from '../points/points.service';
@@ -90,6 +93,7 @@ import { InquiryLinesService } from './inquiry-lines.service';
 import { InquiryNoticesService } from './inquiry-notices.service';
 import { InquiryWorkflowService } from './inquiry-workflow.service';
 import { InquiriesService } from './inquiries.service';
+import { RoundAwardService } from './round-award.service';
 import { RoundDeadlineJob } from './round-deadline.job';
 import { RoundStateService } from './round-state.service';
 import { RoundWorkflowService } from './round-workflow.service';
@@ -97,7 +101,7 @@ import { RoundWorkflowService } from './round-workflow.service';
 const roundNoPipe = new ZodValidationPipe(roundNoSchema);
 
 /**
- * M06 询价单与审批、M07 邀请与发布、M10 提前截止与开标（docs/modules/M06 §4、M07 §4、M10 §4）。
+ * M06 询价单与审批、M07 邀请与发布、M10 提前截止与开标、M12 定标（docs/modules/M06 §4、M07 §4、M10 §4、M12 §4）。
  * 所有接口叠加数据权限，范围外的单据返回 404；供应商响应与报价查看在 QuotesModule（要经过 SealService）
  */
 @Controller('inquiries')
@@ -111,6 +115,7 @@ export class InquiriesController {
     private readonly files: InquiryFilesService,
     private readonly invitees: InquiryInviteesService,
     private readonly rounds: RoundWorkflowService,
+    private readonly awards: RoundAwardService,
   ) {}
 
   @RequirePermissions('inquiry:view')
@@ -343,6 +348,19 @@ export class InquiriesController {
     return this.rounds.open(user, id, roundNo);
   }
 
+  /** R12-1 ~ R12-9：返回最新详情（含定标结果与合同草稿） */
+  @RequirePermissions('inquiry:award')
+  @Post(':id/rounds/:roundNo/award')
+  @HttpCode(200)
+  award(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('roundNo', roundNoPipe) roundNo: number,
+    @Body(new ZodValidationPipe(awardRoundSchema)) body: AwardRoundInput,
+  ): Promise<InquiryDetailDto> {
+    return this.awards.award(user, id, roundNo, body);
+  }
+
   @RequirePermissions('inquiry:create')
   @Post(':id/rounds/:roundNo/lines')
   createLine(
@@ -449,11 +467,11 @@ export class InquiriesController {
 }
 
 /**
- * 导出给后续模块：InquiryAccessService、RoundStateService（M12 定标、M13 变更轮次）、
+ * 导出给后续模块：InquiryAccessService、RoundStateService（M13 变更轮次）、
  * InquiryNoticesService（M13 的变更通知可以照着加）、InquiryLinesService / InquiryFilesService（M13 复用行与附件）
  */
 @Module({
-  imports: [MaterialCategoriesModule, MaterialsModule, PplModule, PointsModule],
+  imports: [MaterialCategoriesModule, MaterialsModule, PplModule, PointsModule, ContractsModule],
   controllers: [InquiriesController],
   providers: [
     InquiryAccessService,
@@ -467,6 +485,7 @@ export class InquiriesController {
     InquiryInviteesService,
     InquiryNoticesService,
     RoundWorkflowService,
+    RoundAwardService,
     AutoReminderJob,
     RoundDeadlineJob,
   ],

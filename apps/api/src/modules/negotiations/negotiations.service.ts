@@ -40,7 +40,7 @@ import type { Prisma } from '../../generated/prisma/client';
 import { AuditService } from '../../infra/audit/audit.service';
 import { toFileDto } from '../../infra/files/files.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { InquiryAccessService } from '../inquiries/inquiry-access.service';
+import { assertInquiryWritable, InquiryAccessService } from '../inquiries/inquiry-access.service';
 import { InquiryNoticesService } from '../inquiries/inquiry-notices.service';
 import { ownQuoteWhere } from '../portal/portal-quotes.service';
 import { QUOTE_VERSION_OWNER } from '../quotes/quote-dto';
@@ -295,7 +295,7 @@ export class NegotiationsService {
     return this.lockQuote(tx, quoteId);
   }
 
-  /** 供应商：只能是自己的报价单；锁询价单（FOR SHARE）→ 锁报价单 */
+  /** 供应商：只能是自己的报价单；锁询价单（FOR SHARE）→ 锁报价单。询价完成或取消后只读（R12-8） */
   private async lockForSupplier(
     tx: Prisma.TransactionClient,
     user: AuthUser,
@@ -306,7 +306,14 @@ export class NegotiationsService {
       select: { round: { select: { inquiryId: true } } },
     });
     if (!target) throw new AppException('NOT_FOUND');
-    await tx.$queryRaw`SELECT 1 FROM "Inquiry" WHERE "id" = ${target.round.inquiryId} FOR SHARE`;
+    const inquiryId = target.round.inquiryId;
+    await tx.$queryRaw`SELECT 1 FROM "Inquiry" WHERE "id" = ${inquiryId} FOR SHARE`;
+    assertInquiryWritable(
+      await tx.inquiry.findUniqueOrThrow({
+        where: { id: inquiryId },
+        select: { docStatus: true, currentRoundStatus: true },
+      }),
+    );
     return this.lockQuote(tx, quoteId);
   }
 

@@ -7,6 +7,7 @@ import {
   type CreateInquiryInput,
   type FileAccessLogDto,
   type InquiryApprovalDto,
+  type InquiryAwardDto,
   type InquiryDetailDto,
   type InquiryListItemDto,
   type InquiryListQuery,
@@ -24,7 +25,7 @@ import { ClockService } from '../../common/clock/clock.service';
 import { AppException } from '../../common/errors/app.exception';
 import { skipTake, toPaginated } from '../../common/pagination';
 import { inAppTz } from '../../common/time';
-import { Prisma } from '../../generated/prisma/client';
+import { Prisma, type InquiryRound } from '../../generated/prisma/client';
 import { AuditService } from '../../infra/audit/audit.service';
 import { SequenceService } from '../../infra/sequences/sequence.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -128,6 +129,7 @@ export class InquiriesService {
       ? await client.user.findUnique({ where: { id: row.approvedById }, select: { id: true, name: true } })
       : null;
     const index = await this.categories.loadIndex(client);
+    const award = round.status === 'EVALUATED' ? await this.awardOf(client, round) : null;
     return {
       ...toInquiryListItemDto(row, index),
       description: row.description,
@@ -153,10 +155,42 @@ export class InquiriesService {
         lineCount: round._count.lines,
         shortlistCount: round._count.quotes,
       },
+      award,
       allowedActions: computeInquiryActions(
         { ...row, currentRoundOpenedAt: round.openedAt },
         user.permissions,
       ),
+    };
+  }
+
+  /** 评标完成的轮次：中标的报价单与供应商、定标人与说明、合同草稿（I-8 恰好一条 WON，I-9 一张合同） */
+  private async awardOf(
+    client: Client,
+    round: Pick<
+      InquiryRound,
+      'id' | 'inquiryId' | 'roundNo' | 'evaluatedAt' | 'awardedById' | 'awardComment'
+    >,
+  ): Promise<InquiryAwardDto | null> {
+    const winner = await client.quote.findFirst({
+      where: { roundId: round.id, status: 'WON' },
+      select: { id: true, supplier: { select: { id: true, code: true, nameZh: true, nameEn: true } } },
+    });
+    if (!winner || !round.evaluatedAt) return null;
+    const awardedBy = round.awardedById
+      ? await client.user.findUnique({ where: { id: round.awardedById }, select: { id: true, name: true } })
+      : null;
+    const contract = await client.contract.findUnique({
+      where: { inquiryId: round.inquiryId },
+      select: { id: true, contractNo: true },
+    });
+    return {
+      roundNo: round.roundNo,
+      quoteId: winner.id,
+      supplier: winner.supplier,
+      awardedAt: round.evaluatedAt.toISOString(),
+      awardedBy,
+      comment: round.awardComment,
+      contract,
     };
   }
 

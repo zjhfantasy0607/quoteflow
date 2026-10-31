@@ -1005,9 +1005,13 @@ describe('M06 询价单与审批', () => {
           allowedActions: ['viewAccessLog'],
         });
       }
-      // 已取消的不能再取消，也不能提交
-      await manager.post(`/api/inquiries/${draft.id}/cancel`).send({ reason: 'x' }).expect(409);
-      await pd.post(`/api/inquiries/${draft.id}/submit`).expect(409);
+      // 已取消的不能再取消，也不能提交（R12-8 取消后只读）
+      for (const res of [
+        await manager.post(`/api/inquiries/${draft.id}/cancel`).send({ reason: 'x' }).expect(409),
+        await pd.post(`/api/inquiries/${draft.id}/submit`).expect(409),
+      ]) {
+        expect(res.body.code).toBe('INQUIRY_COMPLETED_READONLY');
+      }
       // 发布后的取消见 M07（invitations.e2e-spec）；当前轮次评标完成后不能取消（05 §1）
       const evaluated = await createApprovedInquiry(pd, manager, category.LED);
       await ctx.prisma.inquiryRound.updateMany({
@@ -1021,7 +1025,7 @@ describe('M06 询价单与审批', () => {
       expect(
         (await manager.post(`/api/inquiries/${evaluated.id}/cancel`).send({ reason: 'x' }).expect(409)).body
           .code,
-      ).toBe('INQUIRY_INVALID_STATUS');
+      ).toBe('INQUIRY_COMPLETED_READONLY');
     });
   });
 
