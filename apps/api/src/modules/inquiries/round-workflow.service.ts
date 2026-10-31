@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import {
+  computeChangeRoundActions,
   computeInquiryActions,
   hasPplVariant,
+  NEGOTIATION_AUTO_CLOSE,
   PPL_MASTER_CODE,
+  QUOTE_VOIDABLE_STATUSES,
   type ExtendDeadlineInput,
   type InquiryAction,
   type InquiryDetailDto,
@@ -19,6 +22,7 @@ import { AuditService } from '../../infra/audit/audit.service';
 import { ParamsService } from '../../infra/params/params.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MaterialCategoriesService } from '../material-categories/material-categories.service';
+import { closeOpenNegotiations } from '../negotiations/close-negotiations';
 import { PointsService } from '../points/points.service';
 import { PplService } from '../ppl/ppl.service';
 import { InquiryAccessService } from './inquiry-access.service';
@@ -30,7 +34,10 @@ const HOUR_MS = 3600_000;
 
 const codes = (suppliers: { code: string }[]) => suppliers.map((s) => s.code).join(', ');
 
-/** 当前轮次的发布、补充邀请、催报、延期（05 §3、M07 R07-3 ~ R07-10），提前截止与开标（M10 R10-2 ~ R10-5） */
+/**
+ * 当前轮次的发布、补充邀请、催报、延期（05 §3、M07 R07-3 ~ R07-10），提前截止与开标（M10 R10-2 ~ R10-5），
+ * 规格变更轮次的发布（"采购确认"，M13 R13-3、R13-4）
+ */
 @Injectable()
 export class RoundWorkflowService {
   constructor(
@@ -48,6 +55,7 @@ export class RoundWorkflowService {
   ) {}
 
   /**
+   * 发布：当前轮次（第 1 轮）按 R07-3、R07-4；变更草稿（第 N 轮）走 publishChange()（M13）。
    * R07-3 前置条件：询价单已通过；受邀 ≥ 1 且全部启用；截止 ≥ 现在 + inquiry.minDeadlineHours。
    * R07-4 同一事务：冻结模板集版本与变体、每家一条 Quote(INVITED)、每家一封邀请、轮次 → WAITING_QUOTES
    */
@@ -58,25 +66,18 @@ export class RoundWorkflowService {
     input: PublishRoundInput,
   ): Promise<InquiryDetailDto> {
     await this.prisma.$transaction(async (tx) => {
+      const locked = await this.access.lockOrThrow(tx, user, inquiryId);
+      if (roundNo !== locked.currentRoundNo) {
+        await this.publishChange(tx, user, locked, roundNo, input);
+        return;
+      }
       const { inquiry, round } = await this.lockCurrentRound(tx, user, inquiryId, roundNo, 'publish');
       const now = this.clock.now();
-      const minHours = await this.params.get('inquiry.minDeadlineHours');
-      if (input.deadline.getTime() < now.getTime() + minHours * HOUR_MS) {
-        throw new AppException('INQUIRY_DEADLINE_INVALID', { minHours });
-      }
-      const invitees = await tx.inquiryInvitee.findMany({
-        where: { inquiryId },
-        include: { supplier: true },
-        orderBy: [{ createdAt: 'asc' }, { supplier: { code: 'asc' } }],
-      });
-      if (invitees.length === 0) throw new AppException('INQUIRY_NO_INVITEES');
-      const disabled = invitees.filter((i) => i.supplier.status !== 'ENABLED').map((i) => i.supplierId);
-      if (disabled.length > 0)
-        throw new AppException('INQUIRY_SUPPLIER_NOT_INVITABLE', { supplierIds: disabled });
+      await this.assertDeadline(input, now);
+      const suppliers = await this.inviteesToPublish(tx, inquiryId);
       const lineCount = await tx.inquiryLine.count({ where: { roundId: round.id } });
       if (lineCount === 0) throw new AppException('INQUIRY_NO_LINES');
       const template = await this.freezeTemplate(tx, inquiry.materialCategoryId);
-      const suppliers = invitees.map((i) => i.supplier);
       await this.roundState.apply(tx, round.id, 'publish', {
         data: { deadline: input.deadline, ...template, publishedAt: now, publishedById: user.id },
         audit: {
@@ -94,6 +95,124 @@ export class RoundWorkflowService {
       await this.notices.invitation(tx, inquiry, quotes, { deadline: input.deadline, lineCount });
     });
     return this.inquiries.detail(this.prisma, user, inquiryId);
+  }
+
+  /**
+   * M13 R13-3、R13-4（05 §3）：发布变更草稿（"采购确认"）。前置条件：当前轮等待报价 / 报价完成 / 开标中，变更原因和
+   * 变更内容已填（ROUND_CHANGE_REASON_REQUIRED），受邀 ≥ 1 且全部启用，截止有效，至少一行。同一事务：上一轮的报价 → VOID、
+   * 进行中的议价关闭（AUTO_CLOSED_BY_CHANGE）、上一轮 → SUPERSEDED；切换 currentRoundNo；冻结当时激活的模板、本轮 → 等待报价；
+   * 按当前受邀名单建报价单；上一轮也受邀的供应商收 change.spec（变更原因、内容、新截止），新增的收 invitation；审计
+   */
+  private async publishChange(
+    tx: Prisma.TransactionClient,
+    user: AuthUser,
+    inquiry: Inquiry,
+    roundNo: number,
+    input: PublishRoundInput,
+  ): Promise<void> {
+    const round = await tx.inquiryRound.findUnique({
+      where: { inquiryId_roundNo: { inquiryId: inquiry.id, roundNo } },
+    });
+    if (!round) throw new AppException('NOT_FOUND');
+    // 作废的、已发布的旧轮次不能再发布
+    if (round.status !== 'DRAFT' || round.roundNo < 2) throw new AppException('ROUND_INVALID_STATUS');
+    if (!computeChangeRoundActions(inquiry, user.permissions).includes('publish')) {
+      throw new AppException(
+        inquiry.docStatus === 'APPROVED' ? 'ROUND_INVALID_STATUS' : 'INQUIRY_INVALID_STATUS',
+      );
+    }
+    if (!round.changeReason || !round.changeSummary) throw new AppException('ROUND_CHANGE_REASON_REQUIRED');
+    const now = this.clock.now();
+    await this.assertDeadline(input, now);
+    const suppliers = await this.inviteesToPublish(tx, inquiry.id);
+    const lineCount = await tx.inquiryLine.count({ where: { roundId: round.id } });
+    if (lineCount === 0) throw new AppException('INQUIRY_NO_LINES');
+    const template = await this.freezeTemplate(tx, inquiry.materialCategoryId);
+
+    const previous = await tx.inquiryRound.findUniqueOrThrow({
+      where: { inquiryId_roundNo: { inquiryId: inquiry.id, roundNo: inquiry.currentRoundNo } },
+    });
+    const previousSuppliers = new Set(
+      (await tx.quote.findMany({ where: { roundId: previous.id }, select: { supplierId: true } })).map(
+        (q) => q.supplierId,
+      ),
+    );
+    const voided = await tx.quote.updateMany({
+      where: { roundId: previous.id, status: { in: [...QUOTE_VOIDABLE_STATUSES] } },
+      data: { status: 'VOID' },
+    });
+    const closedNegotiations = await closeOpenNegotiations(
+      tx,
+      [previous.id],
+      NEGOTIATION_AUTO_CLOSE.change,
+      user.id,
+      now,
+    );
+    // 先作废上一轮（此时它还是当前轮次，冗余字段跟着变），再切换当前轮次、发布本轮（冗余字段同步为本轮，I-2）
+    await this.roundState.apply(tx, previous.id, 'supersede');
+    await tx.inquiry.update({ where: { id: inquiry.id }, data: { currentRoundNo: round.roundNo } });
+    await this.roundState.apply(tx, round.id, 'publish', {
+      data: { deadline: input.deadline, ...template, publishedAt: now, publishedById: user.id },
+    });
+    const quotes = await this.createQuotes(tx, round.id, suppliers, now);
+    const changed = quotes.filter((q) => previousSuppliers.has(q.supplier.id));
+    const invited = quotes.filter((q) => !previousSuppliers.has(q.supplier.id));
+    await this.notices.changeSpec(tx, inquiry, changed, {
+      roundNo: round.roundNo,
+      changeReason: round.changeReason,
+      changeSummary: round.changeSummary,
+      deadline: input.deadline,
+      lineCount,
+    });
+    await this.notices.invitation(tx, inquiry, invited, { deadline: input.deadline, lineCount });
+    await this.audit.log(
+      {
+        actor: user,
+        action: 'inquiry.publishChange',
+        entityType: 'inquiry',
+        entityId: inquiry.id,
+        summary: [
+          inquiry.formalNo,
+          `R${round.roundNo}`,
+          formatAppTime(input.deadline),
+          codes(suppliers),
+        ].join(' · '),
+        detail: {
+          roundNo: round.roundNo,
+          supersededRoundNo: previous.roundNo,
+          deadline: input.deadline.toISOString(),
+          supplierIds: suppliers.map((s) => s.id),
+          changeSpecQuoteIds: changed.map((q) => q.id),
+          invitedQuoteIds: invited.map((q) => q.id),
+          voidedQuotes: voided.count,
+          closedNegotiations,
+          ...template,
+        },
+      },
+      tx,
+    );
+  }
+
+  /** R07-3：截止 ≥ 现在 + inquiry.minDeadlineHours */
+  private async assertDeadline(input: PublishRoundInput, now: Date): Promise<void> {
+    const minHours = await this.params.get('inquiry.minDeadlineHours');
+    if (input.deadline.getTime() < now.getTime() + minHours * HOUR_MS) {
+      throw new AppException('INQUIRY_DEADLINE_INVALID', { minHours });
+    }
+  }
+
+  /** R07-3：受邀名单（按加入时间、编码）≥ 1 且全部启用 */
+  private async inviteesToPublish(tx: Prisma.TransactionClient, inquiryId: string): Promise<Supplier[]> {
+    const invitees = await tx.inquiryInvitee.findMany({
+      where: { inquiryId },
+      include: { supplier: true },
+      orderBy: [{ createdAt: 'asc' }, { supplier: { code: 'asc' } }],
+    });
+    if (invitees.length === 0) throw new AppException('INQUIRY_NO_INVITEES');
+    const disabled = invitees.filter((i) => i.supplier.status !== 'ENABLED').map((i) => i.supplierId);
+    if (disabled.length > 0)
+      throw new AppException('INQUIRY_SUPPLIER_NOT_INVITABLE', { supplierIds: disabled });
+    return invitees.map((i) => i.supplier);
   }
 
   /** R07-7：等待报价时追加启用的供应商：写入名单、建报价单、发邀请；本轮已经邀请过的跳过 */
@@ -273,7 +392,7 @@ export class RoundWorkflowService {
   }
 
   /**
-   * 锁住询价单，取出要操作的轮次并复核动作（03 §6）。只能操作当前轮次（变更轮次的发布由 M13 补充）；
+   * 锁住询价单，取出要操作的轮次并复核动作（03 §6）。只能操作当前轮次（变更草稿的发布见 publishChange()）；
    * 功能权限已由守卫检查，这里不符合只可能是状态不对：单据不是已通过时报 INQUIRY_INVALID_STATUS，否则报轮次状态
    */
   private async lockCurrentRound(

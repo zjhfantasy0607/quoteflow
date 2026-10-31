@@ -14,6 +14,7 @@ import { ContractDraftFactory } from '../contracts/contract-draft.factory';
 import { closeOpenNegotiations } from '../negotiations/close-negotiations';
 import { PointsService } from '../points/points.service';
 import { InquiryAccessService } from './inquiry-access.service';
+import { findDraftRoundNo } from './inquiry-dto';
 import { InquiryNoticesService } from './inquiry-notices.service';
 import { InquiriesService } from './inquiries.service';
 import { RoundStateService } from './round-state.service';
@@ -51,6 +52,9 @@ export class RoundAwardService {
         where: { inquiryId_roundNo: { inquiryId, roundNo } },
       });
       if (!round) throw new AppException('NOT_FOUND');
+      // 有未发布的变更草稿时先发布或放弃变更（B-52）
+      const draftRoundNo = await findDraftRoundNo(tx, inquiryId);
+      if (draftRoundNo) throw new AppException('ROUND_DRAFT_EXISTS', { roundNo: draftRoundNo });
       // 功能权限已由守卫检查，这里不符合只可能是状态不对（03 §6）
       if (
         round.roundNo !== inquiry.currentRoundNo ||

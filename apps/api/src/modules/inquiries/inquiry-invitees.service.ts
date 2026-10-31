@@ -20,6 +20,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CategoryIndex, MaterialCategoriesService } from '../material-categories/material-categories.service';
 import { supplierWhere, toSupplierDto } from '../suppliers/suppliers.service';
 import { InquiryAccessService } from './inquiry-access.service';
+import { findDraftRoundNo } from './inquiry-dto';
 
 export const inviteeSupplierInclude = {
   materialCategories: { include: { category: true } },
@@ -109,13 +110,14 @@ export class InquiryInviteesService {
   }
 
   /**
-   * 整体替换（R07-2）：只在 editInvitees 允许时（第 1 轮发布前）；新加入的必须是启用的供应商（R04-6），
-   * 已在名单里、后来停用的可以留着（发布时会被拒，R07-3）
+   * 整体替换（R07-2）：只在 editInvitees 允许时（第 1 轮发布前，或有变更草稿时——只影响新一轮，05 §3）；
+   * 新加入的必须是启用的供应商（R04-6），已在名单里、后来停用的可以留着（发布时会被拒，R07-3）
    */
   async replace(user: AuthUser, inquiryId: string, input: UpdateInviteesInput): Promise<InquiryInviteeDto[]> {
     await this.prisma.$transaction(async (tx) => {
       const inquiry = await this.access.lockOrThrow(tx, user, inquiryId);
-      if (!computeInquiryActions(inquiry, user.permissions).includes('editInvitees')) {
+      const draftRoundNo = await findDraftRoundNo(tx, inquiryId);
+      if (!computeInquiryActions({ ...inquiry, draftRoundNo }, user.permissions).includes('editInvitees')) {
         throw new AppException('INQUIRY_NOT_EDITABLE');
       }
       const before = (

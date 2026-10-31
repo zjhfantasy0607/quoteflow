@@ -76,6 +76,23 @@ export class InquiryNoticesService {
     }
   }
 
+  /** R13-4 规格变更发布：上一轮也受邀的供应商每家一封（新一轮的报价单），含变更原因、内容和新截止；只发一次 */
+  async changeSpec(
+    tx: Prisma.TransactionClient,
+    inquiry: NoticeInquiry,
+    quotes: NoticeQuote[],
+    data: { roundNo: number; changeReason: string; changeSummary: string; deadline: Date; lineCount: number },
+  ): Promise<void> {
+    const buyer = await this.buyer(tx, inquiry);
+    for (const q of quotes) {
+      await this.mail.enqueue(tx, {
+        ...this.envelope(inquiry, q, `CHANGE:SPEC:${q.id}`),
+        templateKey: 'change.spec',
+        data: { ...this.base(inquiry, q, buyer), ...data, link: this.link(q) },
+      });
+    }
+  }
+
   /** R07-11 发布后取消；同一张报价单只发一次 */
   async cancelled(
     tx: Prisma.TransactionClient,

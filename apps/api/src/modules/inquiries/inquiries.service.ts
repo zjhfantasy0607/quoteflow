@@ -1,11 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import {
+  computeChangeRoundActions,
   computeInquiryActions,
   INQUIRY_TAB_FILTER,
   isRoundEditable,
   type AuditLogDto,
   type CreateInquiryInput,
   type FileAccessLogDto,
+  type InquiryAction,
   type InquiryApprovalDto,
   type InquiryAwardDto,
   type InquiryDetailDto,
@@ -33,6 +35,7 @@ import { DictsService } from '../dicts/dicts.service';
 import { CategoryIndex, MaterialCategoriesService } from '../material-categories/material-categories.service';
 import { InquiryAccessService } from './inquiry-access.service';
 import {
+  findDraftRoundNo,
   inquiryDetailInclude,
   inquiryListInclude,
   loadRound,
@@ -130,6 +133,7 @@ export class InquiriesService {
       : null;
     const index = await this.categories.loadIndex(client);
     const award = round.status === 'EVALUATED' ? await this.awardOf(client, round) : null;
+    const draftRoundNo = await findDraftRoundNo(client, id);
     return {
       ...toInquiryListItemDto(row, index),
       description: row.description,
@@ -155,9 +159,10 @@ export class InquiriesService {
         lineCount: round._count.lines,
         shortlistCount: round._count.quotes,
       },
+      draftRoundNo,
       award,
       allowedActions: computeInquiryActions(
-        { ...row, currentRoundOpenedAt: round.openedAt },
+        { ...row, currentRoundOpenedAt: round.openedAt, draftRoundNo },
         user.permissions,
       ),
     };
@@ -194,7 +199,10 @@ export class InquiriesService {
     };
   }
 
-  /** 轮次详情：询价行（含每行附件）、整单附件、冻结的模板；edit 只在本轮可编辑时出现（I-4） */
+  /**
+   * 轮次详情：询价行（含每行附件）、整单附件、冻结的模板。allowedActions：当前轮次同询价单（edit 只在本轮可编辑时出现，I-4）；
+   * 变更草稿是 computeChangeRoundActions()（M13）；作废的旧轮次只读，没有动作（R13-8）
+   */
   async roundDetail(
     client: Client,
     user: AuthUser,
@@ -204,9 +212,15 @@ export class InquiriesService {
     const inquiry = await this.access.findOrThrow(client, user, inquiryId);
     const round = await loadRound(client, inquiryId, roundNo);
     if (!round) throw new AppException('NOT_FOUND');
-    const actions = computeInquiryActions(inquiry, user.permissions).filter(
-      (a) => a !== 'edit' || isRoundEditable(inquiry.docStatus, round),
-    );
+    let actions: InquiryAction[] = [];
+    if (round.roundNo === inquiry.currentRoundNo) {
+      const draftRoundNo = await findDraftRoundNo(client, inquiryId);
+      actions = computeInquiryActions({ ...inquiry, draftRoundNo }, user.permissions).filter(
+        (a) => a !== 'edit' || isRoundEditable(inquiry.docStatus, round),
+      );
+    } else if (round.status === 'DRAFT') {
+      actions = computeChangeRoundActions(inquiry, user.permissions);
+    }
     return toInquiryRoundDto(round, actions, await this.categories.loadIndex(client));
   }
 

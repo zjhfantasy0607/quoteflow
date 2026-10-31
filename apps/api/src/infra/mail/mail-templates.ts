@@ -35,6 +35,14 @@ export interface MailTemplateDataMap {
   reminder: SupplierNotice & { deadline: Date; link: string };
   'change.deadline': SupplierNotice & { previousDeadline: Date; deadline: Date; link: string };
   'change.cancel': SupplierNotice & { reason: string };
+  'change.spec': SupplierNotice & {
+    roundNo: number;
+    changeReason: string;
+    changeSummary: string;
+    deadline: Date;
+    lineCount: number;
+    link: string;
+  };
   opening: SupplierNotice & { openedAt: Date; link: string };
   'negotiation.toSupplier': SupplierNotice & {
     type: 'OFFER' | 'CLOSE';
@@ -290,6 +298,57 @@ const cancelled: MailTemplate<MailTemplateDataMap['change.cancel']> = {
   },
 };
 
+/** 多行文本（变更原因、内容）在 HTML 里保留换行 */
+const multiline = (text: string) => esc(text).replace(/\n/g, '<br>');
+
+/**
+ * 规格变更（R13-4）：新一轮发布时发给上一轮也受邀的供应商，含变更原因、主要变更内容、新截止时间；
+ * 上一轮的报价已作废，请按新规格重新报价（门户里有规格对比）
+ */
+const changeSpec: MailTemplate<MailTemplateDataMap['change.spec']> = {
+  type: 'CHANGE',
+  render(lang, d, ctx) {
+    const n = notice(lang, d);
+    const { formalNo, title } = d.inquiry;
+    const deadline = formatMailTime(d.deadline, lang);
+    if (lang === 'zh-CN') {
+      const message = `${ctx.company.nameZh}变更了询价 ${formalNo}（${title}）的规格，已发布第 ${d.roundNo} 轮，请${n.supplier}按新规格重新报价。上一轮的报价已作废，可以在供应商门户查看规格对比。`;
+      return {
+        subject: `规格变更：${formalNo} ${title}（第 ${d.roundNo} 轮）`,
+        body: `${n.hello}<p>${esc(message)}</p><ul><li>变更原因：${multiline(d.changeReason)}</li><li>主要变更内容：${multiline(d.changeSummary)}</li><li>询价明细：${d.lineCount} 行</li><li>报价截止：${esc(deadline)}</li></ul>${button(d.link, '查看变更并重新报价')}${n.contact}`,
+        text: `${n.helloText}
+
+${message}
+变更原因：${d.changeReason}
+主要变更内容：${d.changeSummary}
+询价明细：${d.lineCount} 行
+报价截止：${deadline}
+
+查看变更并重新报价：${d.link}
+
+${n.contactText}`,
+      };
+    }
+    const message = `${ctx.company.nameEn} has changed the specifications of RFQ ${formalNo} (${title}) and published round ${d.roundNo}. Please quote again for ${n.supplier} according to the new specifications. The quotation for the previous round is now void; a comparison of the specifications is available in the supplier portal.`;
+    const lines = `${d.lineCount} ${d.lineCount === 1 ? 'line' : 'lines'}`;
+    return {
+      subject: `Specification change: ${formalNo} ${title} (round ${d.roundNo})`,
+      body: `${n.hello}<p>${esc(message)}</p><ul><li>Reason for change: ${multiline(d.changeReason)}</li><li>Main changes: ${multiline(d.changeSummary)}</li><li>Items: ${lines}</li><li>Quotation deadline: ${esc(deadline)}</li></ul>${button(d.link, 'View changes and quote')}${n.contact}`,
+      text: `${n.helloText}
+
+${message}
+Reason for change: ${d.changeReason}
+Main changes: ${d.changeSummary}
+Items: ${lines}
+Quotation deadline: ${deadline}
+
+View changes and quote: ${d.link}
+
+${n.contactText}`,
+    };
+  },
+};
+
 /** 开标（R10-5）：只发给进入评标的供应商，不含任何金额、名次或其他供应商的信息 */
 const opening: MailTemplate<MailTemplateDataMap['opening']> = {
   type: 'OPENING',
@@ -535,6 +594,7 @@ export const MAIL_TEMPLATES: { [K in MailTemplateKey]: MailTemplate<MailTemplate
   reminder,
   'change.deadline': deadlineChanged,
   'change.cancel': cancelled,
+  'change.spec': changeSpec,
   opening,
   'negotiation.toSupplier': negotiationToSupplier,
   'negotiation.toBuyer': negotiationToBuyer,

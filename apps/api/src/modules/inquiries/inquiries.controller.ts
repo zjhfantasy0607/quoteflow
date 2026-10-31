@@ -20,6 +20,7 @@ import {
   attachInquiryFileSchema,
   awardRoundSchema,
   cancelInquirySchema,
+  changeRoundSchema,
   copyLineFilesSchema,
   createInquirySchema,
   createLineSchema,
@@ -42,6 +43,7 @@ import {
   type AwardRoundInput,
   type AuditLogDto,
   type CancelInquiryInput,
+  type ChangeRoundInput,
   type CopyLineFilesInput,
   type CreateInquiryInput,
   type CreateLineInput,
@@ -55,6 +57,7 @@ import {
   type InquiryLineDto,
   type InquiryListItemDto,
   type InquiryListQuery,
+  type InquiryRoundBriefDto,
   type InquiryRoundDto,
   type InquiryUserOptionDto,
   type InviteeCandidateDto,
@@ -67,6 +70,7 @@ import {
   type RejectInquiryInput,
   type RemindQuotesInput,
   type ReorderLinesInput,
+  type RoundDiffDto,
   type UpdateInquiryInput,
   type UpdateInviteesInput,
   type UpdateLineInput,
@@ -94,6 +98,7 @@ import { InquiryNoticesService } from './inquiry-notices.service';
 import { InquiryWorkflowService } from './inquiry-workflow.service';
 import { InquiriesService } from './inquiries.service';
 import { RoundAwardService } from './round-award.service';
+import { RoundChangeService } from './round-change.service';
 import { RoundDeadlineJob } from './round-deadline.job';
 import { RoundStateService } from './round-state.service';
 import { RoundWorkflowService } from './round-workflow.service';
@@ -101,8 +106,8 @@ import { RoundWorkflowService } from './round-workflow.service';
 const roundNoPipe = new ZodValidationPipe(roundNoSchema);
 
 /**
- * M06 询价单与审批、M07 邀请与发布、M10 提前截止与开标、M12 定标（docs/modules/M06 §4、M07 §4、M10 §4、M12 §4）。
- * 所有接口叠加数据权限，范围外的单据返回 404；供应商响应与报价查看在 QuotesModule（要经过 SealService）
+ * M06 询价单与审批、M07 邀请与发布、M10 提前截止与开标、M12 定标、M13 规格变更
+ * （docs/modules/M06 §4、M07 §4、M10 §4、M12 §4、M13 §4）。所有接口叠加数据权限，范围外的单据返回 404；供应商响应与报价查看在 QuotesModule（要经过 SealService）
  */
 @Controller('inquiries')
 export class InquiriesController {
@@ -116,6 +121,7 @@ export class InquiriesController {
     private readonly invitees: InquiryInviteesService,
     private readonly rounds: RoundWorkflowService,
     private readonly awards: RoundAwardService,
+    private readonly changes: RoundChangeService,
   ) {}
 
   @RequirePermissions('inquiry:view')
@@ -267,6 +273,58 @@ export class InquiriesController {
     @Body(new ZodValidationPipe(updateInviteesSchema)) body: UpdateInviteesInput,
   ): Promise<InquiryInviteeDto[]> {
     return this.invitees.replace(user, id, body);
+  }
+
+  /** M13：轮次列表（号、状态、截止、发布时间、报价数） */
+  @RequirePermissions('inquiry:view')
+  @Get(':id/rounds')
+  roundList(@CurrentUser() user: AuthUser, @Param('id') id: string): Promise<InquiryRoundBriefDto[]> {
+    return this.changes.list(user, id);
+  }
+
+  /** R13-1：新建变更轮次（复制当前轮的询价行与附件），返回新轮次 */
+  @RequirePermissions('inquiry:changeSpec')
+  @Post(':id/rounds')
+  createChangeRound(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(changeRoundSchema)) body: ChangeRoundInput,
+  ): Promise<InquiryRoundDto> {
+    return this.changes.create(user, id, body);
+  }
+
+  /** R13-2：保存变更说明（变更原因、主要变更内容） */
+  @RequirePermissions('inquiry:changeSpec')
+  @Put(':id/rounds/:roundNo')
+  updateChangeRound(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('roundNo', roundNoPipe) roundNo: number,
+    @Body(new ZodValidationPipe(changeRoundSchema)) body: ChangeRoundInput,
+  ): Promise<InquiryRoundDto> {
+    return this.changes.update(user, id, roundNo, body);
+  }
+
+  /** R13-7：放弃变更（只能是未发布的第 N 轮），返回最新详情 */
+  @RequirePermissions('inquiry:changeSpec')
+  @Delete(':id/rounds/:roundNo')
+  discardChangeRound(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('roundNo', roundNoPipe) roundNo: number,
+  ): Promise<InquiryDetailDto> {
+    return this.changes.discard(user, id, roundNo);
+  }
+
+  /** R13-6：与上一轮的规格对比 */
+  @RequirePermissions('inquiry:view')
+  @Get(':id/rounds/:roundNo/diff')
+  roundDiff(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('roundNo', roundNoPipe) roundNo: number,
+  ): Promise<RoundDiffDto> {
+    return this.changes.diff(user, id, roundNo);
   }
 
   @RequirePermissions('inquiry:view')
@@ -486,6 +544,7 @@ export class InquiriesController {
     InquiryNoticesService,
     RoundWorkflowService,
     RoundAwardService,
+    RoundChangeService,
     AutoReminderJob,
     RoundDeadlineJob,
   ],

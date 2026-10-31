@@ -322,4 +322,81 @@ describe('M10 密封测试集', () => {
     expect(cancelled.allowedActions).toEqual(expect.arrayContaining(['evaluate', 'exportMatrix']));
     expect(cancelled.allowedActions).not.toContain('shortlist');
   });
+
+  it('S-4 R13-5 从未开标就被规格变更作废的轮次永久密封；开过标再变更的旧轮次照样能看', async () => {
+    ctx.clock.set(at(8 * HOUR));
+    const change = async (id: string, deadline: Date) => {
+      await agents.buyer
+        .post(`/api/inquiries/${id}/rounds`)
+        .send({ changeReason: '显色指数 Ra80 → Ra90', changeSummary: '全部改为 Ra90' })
+        .expect(201);
+      await agents.buyer
+        .post(`/api/inquiries/${id}/rounds/2/publish`)
+        .send({ deadline: deadline.toISOString() })
+        .expect(200);
+    };
+    const never = await publishLedInquiry(
+      ctx.prisma,
+      agents.buyer,
+      agents.manager,
+      category['LED-2835'],
+      [s.a.id, s.b.id],
+      at(10 * HOUR),
+      '变更前未开标',
+    );
+    await submitQuote(portal.a, never.quotes[0], ledLines(never, '3.3333', '5.5555'), { remark: '甲机密备注' });
+    await change(never.inquiry.id, at(11 * HOUR));
+    const base = `/api/inquiries/${never.inquiry.id}`;
+    const url = `${base}/rounds/1`;
+    for (const [name, agent] of [
+      ['buyer', agents.buyer],
+      ['manager', agents.manager],
+    ] as const) {
+      for (const path of [
+        `${url}/quotes/${never.quotes[0]}`,
+        `${url}/quotes/${never.quotes[0]}/versions/1`,
+        `${url}/matrix`,
+        `${url}/matrix/export`,
+        `/api/quotes/${never.quotes[0]}/negotiation`,
+      ]) {
+        expect((await agent.get(path).expect(403)).body.code).toBe('QUOTE_SEALED');
+      }
+      const list: RoundResponsesDto = (await agent.get(`${url}/responses`).expect(200)).body;
+      expect(list).toMatchObject({ sealed: true, items: [{ status: 'VOID' }, { status: 'VOID' }] });
+      expect(list.items[0]).not.toHaveProperty('totalAmount');
+      for (const page of [base, `${base}/rounds`, url, `${base}/rounds/2`, `${base}/rounds/2/diff`, `${base}/timeline`]) {
+        expectNoSecrets((await agent.get(page).expect(200)).body, `${name} ${page}`);
+      }
+    }
+    // 变更通知等邮件里也没有
+    const emails = await ctx.prisma.emailMessage.findMany({ where: { inquiryId: never.inquiry.id } });
+    expect(emails.some((e) => e.type === 'CHANGE')).toBe(true);
+    for (const e of emails) expectNoSecrets([e.subject, e.html, e.text], `email ${e.id}`);
+    // S-6 供应商自己照样能看旧轮次的全部报价（P-4）
+    const own = (await portal.a.get(`/api/portal/quotes/${never.quotes[0]}`).expect(200)).body;
+    expect(own).toMatchObject({ status: 'VOID', currentVersion: { remark: '甲机密备注' } });
+
+    // 开过标之后才变更：旧轮次的报价和比价照样能看（只读）
+    const opened = await publishLedInquiry(
+      ctx.prisma,
+      agents.buyer,
+      agents.manager,
+      category['LED-2835'],
+      [s.a.id],
+      at(9 * HOUR),
+      '开标后变更',
+    );
+    await submitQuote(portal.a, opened.quotes[0], ledLines(opened, '1.1', '2.2'));
+    ctx.clock.set(at(9 * HOUR));
+    await ctx.app.get(RoundDeadlineJob).run();
+    await agents.manager.post(`/api/inquiries/${opened.inquiry.id}/rounds/1/open`).expect(200);
+    await change(opened.inquiry.id, at(11 * HOUR));
+    const old = `/api/inquiries/${opened.inquiry.id}/rounds/1`;
+    const detail: RoundQuoteDetailDto = (await agents.buyer.get(`${old}/quotes/${opened.quotes[0]}`).expect(200)).body;
+    expect(detail).toMatchObject({ status: 'VOID', currentVersion: { totalAmount: '2200.00' } });
+    const matrix: RoundMatrixDto = (await agents.buyer.get(`${old}/matrix`).expect(200)).body;
+    expect(matrix).toMatchObject({ roundStatus: 'SUPERSEDED', canShortlist: false });
+    const list: RoundResponsesDto = (await agents.buyer.get(`${old}/responses`).expect(200)).body;
+    expect(list).toMatchObject({ sealed: false, items: [{ status: 'VOID', totalAmount: '2200.00' }] });
+  });
 });

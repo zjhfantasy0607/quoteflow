@@ -1,4 +1,5 @@
 import {
+  diffRounds,
   inquiryDisplayStatus,
   type InquiryAction,
   type InquiryFileDto,
@@ -7,6 +8,9 @@ import {
   type InquiryListItemDto,
   type InquiryRoundDto,
   type MaterialCategoryBriefDto,
+  type RoundDiffDto,
+  type RoundDiffFile,
+  type RoundDiffRoundInput,
 } from '@quoteflow/shared';
 import type { InquiryRound, MaterialCategory, Prisma } from '../../generated/prisma/client';
 import { toFileDto } from '../../infra/files/files.service';
@@ -65,6 +69,67 @@ export async function loadRound(
     orderBy: FILE_ORDER,
   });
   return { ...round, lines, files };
+}
+
+/** 未发布的变更轮次（DRAFT，第 N 轮，05 §3 最多一个）的轮次号；没有为 null */
+export async function findDraftRoundNo(client: Client, inquiryId: string): Promise<number | null> {
+  const draft = await client.inquiryRound.findFirst({
+    where: { inquiryId, status: 'DRAFT', roundNo: { gt: 1 } },
+    select: { roundNo: true },
+  });
+  return draft?.roundNo ?? null;
+}
+
+/**
+ * R13-6：第 roundNo 轮与上一轮的规格对比；轮次不存在或是第 1 轮时为 null。
+ * includeRemark = false（门户）时不比较、不返回询价行备注（P-5）
+ */
+export async function loadRoundDiff(
+  client: Client,
+  inquiryId: string,
+  roundNo: number,
+  options: { includeRemark: boolean },
+): Promise<RoundDiffDto | null> {
+  if (roundNo < 2) return null;
+  const current = await loadRound(client, inquiryId, roundNo);
+  const previous = await loadRound(client, inquiryId, roundNo - 1);
+  if (!current || !previous) return null;
+  const toFile = (f: InquiryFileRow): RoundDiffFile => ({
+    fileId: f.fileId,
+    originalName: f.file.originalName,
+    kind: f.kind as InquiryFileKind,
+  });
+  const toInput = (round: RoundRow): RoundDiffRoundInput => ({
+    lines: round.lines.map((l) => ({
+      lineId: l.id,
+      lineNo: l.lineNo,
+      sourceLineId: l.sourceLineId,
+      materialCode: l.materialCode,
+      nameZh: l.nameZh,
+      nameEn: l.nameEn,
+      spec: l.spec,
+      unitCode: l.unitCode,
+      quantity: l.quantity.toFixed(),
+      category: {
+        id: l.category.id,
+        code: l.category.code,
+        nameZh: l.category.nameZh,
+        nameEn: l.category.nameEn,
+      },
+      brand: l.brand,
+      drawingRef: l.drawingRef,
+      remark: l.remark,
+      files: round.files.filter((f) => f.lineId === l.id).map(toFile),
+    })),
+    files: round.files.filter((f) => f.lineId === null).map(toFile),
+  });
+  return {
+    roundNo,
+    previousRoundNo: roundNo - 1,
+    changeReason: current.changeReason,
+    changeSummary: current.changeSummary,
+    ...diffRounds(toInput(previous), toInput(current), options),
+  };
 }
 
 /** 单行连同附件（同样分开查询） */

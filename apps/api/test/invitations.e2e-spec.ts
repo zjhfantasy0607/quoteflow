@@ -410,7 +410,13 @@ describe('M07 邀请发布与邮件通知', () => {
         currentDeadline: deadline.toISOString(),
         currentRound: { status: 'WAITING_QUOTES', publishedAt: START.toISOString() },
       });
-      expect(detail.allowedActions).toEqual(['lateInvite', 'remind', 'extendDeadline', 'viewAccessLog']);
+      expect(detail.allowedActions).toEqual([
+        'lateInvite',
+        'remind',
+        'extendDeadline',
+        'createChangeRound',
+        'viewAccessLog',
+      ]);
 
       const round = await roundOf(buyer, detail.id);
       // LED-2835 继承上级 LED 绑定的 PPL-LED
@@ -746,7 +752,7 @@ describe('M07 邀请发布与邮件通知', () => {
       let current = await detailOf(buyer, detail.id);
       expect(current).toMatchObject({
         displayStatus: 'QUOTES_CLOSED',
-        allowedActions: ['extendDeadline', 'viewAccessLog'],
+        allowedActions: ['extendDeadline', 'createChangeRound', 'viewAccessLog'],
       });
 
       // 晚于原截止但早于 现在 + 1 小时

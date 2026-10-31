@@ -21,7 +21,7 @@ import { skipTake, toPaginated } from '../../common/pagination';
 import type { Prisma } from '../../generated/prisma/client';
 import { toFileDto } from '../../infra/files/files.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { loadRound, type RoundRow } from '../inquiries/inquiry-dto';
+import { loadRound, loadRoundDiff, type RoundRow } from '../inquiries/inquiry-dto';
 import { draftOf, loadVersion, loadVersionSummaries } from '../quotes/quote-dto';
 import { QuoteSheetService } from '../quotes/quote-sheet.service';
 
@@ -153,7 +153,8 @@ export class PortalQuotesService {
 
   /**
    * 报价单详情（R08-7）：询价信息、轮次（含变更说明）、询价行与附件、我的报价状态；M09 起另有该轮冻结的模板、
-   * 草稿、当前版本和 allowedActions；M11 起另有议价状态（议价线程走 /negotiation）。
+   * 草稿、当前版本和 allowedActions；M11 起另有议价状态（议价线程走 /negotiation）；M13 起另有本供应商各轮的报价单和
+   * 与上一轮的规格对比（只在上一轮也邀请了本供应商时给，P-2）。
    * R08-2：没作废的报价单第一次打开时写 firstViewedAt（采购方"供应商响应"里显示"已查看"），只写一次
    */
   async detail(user: AuthUser, quoteId: string): Promise<PortalQuoteDetailDto> {
@@ -185,6 +186,12 @@ export class PortalQuotesService {
     const filesOf = (lineId: string | null) =>
       rows.files.filter((f) => f.lineId === lineId).map(toPortalFile);
     const cancelled = inquiry.docStatus === 'CANCELLED';
+    const rounds = await this.prisma.quote.findMany({
+      where: { ...ownQuoteWhere(user), round: { inquiryId: inquiry.id, publishedAt: { not: null } } },
+      select: { id: true, status: true, round: { select: { roundNo: true, status: true } } },
+      orderBy: { round: { roundNo: 'asc' } },
+    });
+    const invitedBefore = rounds.some((r) => r.round.roundNo === round.roundNo - 1);
     return {
       id: quote.id,
       status: quote.status,
@@ -237,6 +244,15 @@ export class PortalQuotesService {
         : null,
       versionCount: await this.prisma.quoteVersion.count({ where: { quoteId: quote.id } }),
       negotiationStatus: quote.negotiation?.status ?? null,
+      rounds: rounds.map((r) => ({
+        quoteId: r.id,
+        roundNo: r.round.roundNo,
+        roundStatus: r.round.status,
+        status: r.status,
+      })),
+      diff: invitedBefore
+        ? await loadRoundDiff(this.prisma, inquiry.id, round.roundNo, { includeRemark: false })
+        : null,
       allowedActions: computePortalQuoteActions(
         {
           quoteStatus: quote.status,
