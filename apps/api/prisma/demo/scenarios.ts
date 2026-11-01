@@ -1,6 +1,6 @@
 // 演示场景（docs/06-种子数据.md §3）。单据一律通过 service 方法创建，状态和不变量与真实操作一致。
 // 哪个模块完成就在这里补哪个场景：M06 → D1、D2；M09 → D3；M11 → D4；M12 → D5；M13 → D6；M14 → D7；
-// M15 的历史数据 H 在 history.ts。
+// M15 的历史数据 H 在 history.ts；M16 → D8。
 import type { INestApplicationContext } from '@nestjs/common';
 import {
   approveInquirySchema,
@@ -15,6 +15,7 @@ import {
   negotiationRespondSchema,
   publishRoundSchema,
   quoteFormSchema,
+  rejectInquirySchema,
   updateInviteesSchema,
   updateContractSchema,
   updateLineSchema,
@@ -1025,7 +1026,9 @@ export async function seedD7(ctx: DemoContext): Promise<string> {
       buyer,
       created.id,
       1,
-      linesFromMaterialsSchema.parse({ items: [{ materialId: ctx.material['MAT-000010'], quantity: '15000' }] }),
+      linesFromMaterialsSchema.parse({
+        items: [{ materialId: ctx.material['MAT-000010'], quantity: '15000' }],
+      }),
     );
     await lines.create(
       buyer,
@@ -1117,10 +1120,186 @@ export async function seedD7(ctx: DemoContext): Promise<string> {
     await contracts.submit(buyer, contractId);
   });
   await atOffset(ctx, -6 * DAY_MS, () =>
-    contracts.review(manager, contractId, contractDecisionSchema.parse({ action: 'APPROVE', comment: '条款齐全' })),
+    contracts.review(
+      manager,
+      contractId,
+      contractDecisionSchema.parse({ action: 'APPROVE', comment: '条款齐全' }),
+    ),
   );
   await atOffset(ctx, -5 * DAY_MS, () =>
     contracts.approve(approver, contractId, contractDecisionSchema.parse({ action: 'APPROVE' })),
   );
   return inquiry.formalNo!;
+}
+
+/** D8 两款恒压电源的报价（PPL-PERIPH 的必填列） */
+function d8Values(prices: [string, string]): Record<string, unknown>[] {
+  const common = {
+    brand: '卓越',
+    material: '铝合金外壳',
+    tax_rate: '13',
+    lead_time_days: 20,
+    moq: 500,
+    price_valid_until: '2027-06-30',
+    payment_terms: 'NET30',
+    sample_lead_days: 5,
+    warranty_months: 36,
+    rohs: true,
+    packing_method: 'CARTON',
+    trade_term: 'DAP',
+  };
+  return [
+    { ...common, model: 'ZY-CV100-24', unit_price_incl_tax: prices[0], pcs_per_carton: 20 },
+    { ...common, model: 'ZY-CV60-24', unit_price_incl_tax: prices[1], pcs_per_carton: 30 },
+  ];
+}
+
+/**
+ * D8：工作台待办（M16）。三张小单各停在一个状态，让工作台的卡片都有内容：
+ * PJ-2026-007 / 硅胶线询价——buyer.zhang 建单提交，manager.zhang 驳回（"我的草稿"里带"被驳回"）；
+ * PJ-2026-008 / 反光杯询价——审批通过、还没发布（"待发布"）；
+ * PJ-2026-009 / 恒压驱动电源询价——三天前发布给 SUP10002、SUP10006，截止在昨天 18:00；SUP10002 已报价，
+ * SUP10006 未响应，截止任务已关闭（主管"待开标"，已响应 1/2）
+ */
+export async function seedD8(ctx: DemoContext): Promise<string[]> {
+  const { pd, buyer, manager } = ctx.users;
+  const inquiries = ctx.app.get(InquiriesService);
+  const lines = ctx.app.get(InquiryLinesService);
+  const workflow = ctx.app.get(InquiryWorkflowService);
+  const create = (projectNo: string, title: string, categoryCode: string, description: string) =>
+    inquiries.create(
+      buyer,
+      createInquirySchema.parse({
+        projectNo,
+        title,
+        materialCategoryId: ctx.category[categoryCode],
+        currency: 'CNY',
+        description,
+        ownerId: buyer.id,
+        pdUserId: pd.id,
+      }),
+    );
+
+  const wire = await atOffset(ctx, -2 * DAY_MS, async () => {
+    const created = await create(
+      'PJ-2026-007',
+      '硅胶线询价',
+      'PER-WIRE',
+      '线条灯内部连线，耐温 200℃，红黑双色。',
+    );
+    await lines.createFromMaterials(
+      buyer,
+      created.id,
+      1,
+      linesFromMaterialsSchema.parse({
+        items: [{ materialId: ctx.material['MAT-000009'], quantity: '20000' }],
+      }),
+    );
+    await workflow.submit(buyer, created.id);
+    return created;
+  });
+  await atOffset(ctx, -DAY_MS, () =>
+    workflow.reject(
+      manager,
+      wire.id,
+      rejectInquirySchema.parse({ comment: '数量请按季度拆成 4 行，并写明红黑两色各自的用量。' }),
+    ),
+  );
+
+  const reflector = await atOffset(ctx, -2 * DAY_MS, async () => {
+    const created = await create(
+      'PJ-2026-008',
+      '反光杯询价',
+      'PER-REFL',
+      '筒灯配套铝反光杯，阳极氧化镜面，需提供盐雾测试报告。',
+    );
+    await lines.createFromMaterials(
+      buyer,
+      created.id,
+      1,
+      linesFromMaterialsSchema.parse({
+        items: [{ materialId: ctx.material['MAT-000004'], quantity: '30000' }],
+      }),
+    );
+    await workflow.submit(buyer, created.id);
+    return created;
+  });
+  const ready = await atOffset(ctx, -DAY_MS + 2 * HOUR_MS, () =>
+    workflow.approve(manager, reflector.id, approveInquirySchema.parse({ comment: '同意，尽快发布' })),
+  );
+
+  const deadline = inAppTz(new Date())
+    .subtract(1, 'day')
+    .hour(18)
+    .minute(0)
+    .second(0)
+    .millisecond(0)
+    .toDate();
+  const driver = await atOffset(ctx, -4 * DAY_MS, async () => {
+    const created = await create(
+      'PJ-2026-009',
+      '恒压驱动电源询价',
+      'PER-DRV',
+      '线条灯配套恒压电源，户外使用，需 IP67 与 CE 认证。',
+    );
+    await lines.createFromMaterials(
+      buyer,
+      created.id,
+      1,
+      linesFromMaterialsSchema.parse({
+        items: [{ materialId: ctx.material['MAT-000006'], quantity: '3000' }],
+      }),
+    );
+    await lines.create(
+      buyer,
+      created.id,
+      1,
+      createLineSchema.parse({
+        source: 'MANUAL',
+        nameZh: '恒压驱动电源 60W',
+        nameEn: 'CV LED Driver 60W',
+        spec: 'AC220V / DC24V / 60W / IP67',
+        unitCode: 'PCS',
+        categoryId: ctx.category['DRV-CV'],
+        quantity: '2000',
+      }),
+    );
+    await workflow.submit(buyer, created.id);
+    return workflow.approve(manager, created.id, approveInquirySchema.parse({}));
+  });
+  const suppliers = await ctx.prisma.supplier.findMany({
+    where: { code: { in: ['SUP10002', 'SUP10006'] } },
+    select: { id: true },
+  });
+  await atOffset(ctx, -3 * DAY_MS, async () => {
+    await ctx.app
+      .get(InquiryInviteesService)
+      .replace(buyer, driver.id, updateInviteesSchema.parse({ supplierIds: suppliers.map((s) => s.id) }));
+    await ctx.app
+      .get(RoundWorkflowService)
+      .publish(buyer, driver.id, 1, publishRoundSchema.parse({ deadline: deadline.toISOString() }));
+  });
+  const quote = await ctx.prisma.quote.findFirstOrThrow({
+    where: { round: { inquiryId: driver.id }, supplier: { code: 'SUP10002' } },
+    select: { id: true },
+  });
+  const lineIds = await ctx.prisma.inquiryLine.findMany({
+    where: { round: { inquiryId: driver.id } },
+    orderBy: { lineNo: 'asc' },
+    select: { id: true },
+  });
+  const values = d8Values(['86.00', '58.50']);
+  const zhuoyue = await supplierActor(ctx, 'SUP10002');
+  await atOffset(ctx, -2 * DAY_MS, () =>
+    ctx.app.get(QuoteSubmissionService).submit(
+      zhuoyue,
+      quote.id,
+      quoteFormSchema.parse({
+        lines: { [lineIds[0].id]: values[0], [lineIds[1].id]: values[1] },
+        remark: '含税含运费，送货到深圳宝安。',
+      }),
+    ),
+  );
+  await atOffset(ctx, deadline.getTime() - Date.now() + 60_000, () => ctx.app.get(RoundDeadlineJob).run());
+  return [wire.draftNo, ready.formalNo!, driver.formalNo!];
 }

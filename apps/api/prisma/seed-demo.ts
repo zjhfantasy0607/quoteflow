@@ -6,7 +6,17 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { seedHistory } from './demo/history';
-import { demoContext, seedD1, seedD2, seedD3, seedD4, seedD5, seedD6, seedD7 } from './demo/scenarios';
+import {
+  demoContext,
+  seedD1,
+  seedD2,
+  seedD3,
+  seedD4,
+  seedD5,
+  seedD6,
+  seedD7,
+  seedD8,
+} from './demo/scenarios';
 
 async function main(): Promise<void> {
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn'] });
@@ -25,9 +35,11 @@ async function main(): Promise<void> {
     const d5 = await seedD5(ctx);
     const d6 = await seedD6(ctx);
     const d7 = await seedD7(ctx);
+    const d8 = await seedD8(ctx);
     console.log(
       `seed-demo: D1 draft ${d1}, D2 pending approval ${d2}, D3 awaiting quotes ${d3}, D4 negotiating ${d4}, ` +
-        `D5 awarded ${d5}, D6 round 2 ${d6}, D7 contract approved ${d7}`,
+        `D5 awarded ${d5}, D6 round 2 ${d6}, D7 contract approved ${d7}, ` +
+        `D8 rejected draft / ready to publish / quotes closed ${d8.join(' / ')}`,
     );
     const history = await seedHistory(ctx);
     console.log(
