@@ -1,5 +1,6 @@
 // 演示场景（docs/06-种子数据.md §3）。单据一律通过 service 方法创建，状态和不变量与真实操作一致。
-// 哪个模块完成就在这里补哪个场景：M06 → D1、D2；M09 → D3；M11 → D4；M12 → D5；M13 → D6；M14 → D7。
+// 哪个模块完成就在这里补哪个场景：M06 → D1、D2；M09 → D3；M11 → D4；M12 → D5；M13 → D6；M14 → D7；
+// M15 的历史数据 H 在 history.ts。
 import type { INestApplicationContext } from '@nestjs/common';
 import {
   approveInquirySchema,
@@ -44,7 +45,7 @@ import { demoPdf, demoPng } from './demo-files';
 export interface DemoContext {
   app: INestApplicationContext;
   prisma: PrismaService;
-  users: Record<'pd' | 'buyer' | 'manager' | 'approver', AuthUser>;
+  users: Record<'pd' | 'buyer' | 'buyerLi' | 'manager' | 'approver', AuthUser>;
   category: Record<string, string>;
   material: Record<string, string>;
 }
@@ -66,6 +67,7 @@ export async function demoContext(app: INestApplicationContext): Promise<DemoCon
     users: {
       pd: await actor('pd.wang'),
       buyer: await actor('buyer.zhang'),
+      buyerLi: await actor('buyer.li'),
       manager: await actor('manager.zhang'),
       approver: await actor('approver.zhao'),
     },
@@ -199,7 +201,7 @@ const HOUR_MS = 3600_000;
 const DAY_MS = 24 * HOUR_MS;
 
 /** 供应商门户账号（06 §2.8：用户名就是联系邮箱，seed 里已激活） */
-async function supplierActor(ctx: DemoContext, supplierCode: string): Promise<AuthUser> {
+export async function supplierActor(ctx: DemoContext, supplierCode: string): Promise<AuthUser> {
   const user = await ctx.prisma.user.findFirst({
     where: { supplier: { code: supplierCode }, userType: 'SUPPLIER', status: 'ACTIVE' },
     include: userWithRolesInclude,
@@ -210,7 +212,7 @@ async function supplierActor(ctx: DemoContext, supplierCode: string): Promise<Au
 }
 
 /** 把时钟拨到"现在 + offsetMs"（负数 = 过去）执行 run，结束后拨回（06 §1） */
-async function atOffset<T>(ctx: DemoContext, offsetMs: number, run: () => Promise<T>): Promise<T> {
+export async function atOffset<T>(ctx: DemoContext, offsetMs: number, run: () => Promise<T>): Promise<T> {
   const clock = ctx.app.get(ClockService);
   clock.setOffset(offsetMs);
   try {

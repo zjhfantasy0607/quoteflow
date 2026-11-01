@@ -5,6 +5,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { seedHistory } from './demo/history';
 import { demoContext, seedD1, seedD2, seedD3, seedD4, seedD5, seedD6, seedD7 } from './demo/scenarios';
 
 async function main(): Promise<void> {
@@ -27,6 +28,11 @@ async function main(): Promise<void> {
     console.log(
       `seed-demo: D1 draft ${d1}, D2 pending approval ${d2}, D3 awaiting quotes ${d3}, D4 negotiating ${d4}, ` +
         `D5 awarded ${d5}, D6 round 2 ${d6}, D7 contract approved ${d7}`,
+    );
+    const history = await seedHistory(ctx);
+    console.log(
+      `seed-demo: H ${history.inquiries} completed inquiries (HIST-*) with ${history.contracts} approved contracts; ` +
+        `${history.emails} historical emails marked as sent`,
     );
   } finally {
     await app.close();
