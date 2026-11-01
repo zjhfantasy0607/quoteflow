@@ -1,11 +1,17 @@
 export default {
   home: {
     welcome: '{name}，您好',
-    intro: '这里列出邀请贵司参加的询价。请在截止时间前查看规格书和产品图，并按要求报价。',
-    pending: '待处理',
-    evaluating: '评标中',
-    closed: '已结束',
-    goList: '查看询价',
+    intro: '这里列出邀请贵司参加的询价。请在截止时间前查看规格书和产品图，并按要求报价。时间均为北京时间。',
+    cards: {
+      pendingQuotes: '待报价',
+      negotiations: '议价待回复',
+      recentResults: '最近结果',
+    },
+    recentHint: '最近 {days} 天内定标',
+    submitted: '已提交',
+    notSubmitted: '未提交',
+    offeredAt: '采购方方案发出于 {time}',
+    evaluatedAt: '定标于 {time}',
   },
   quotes: {
     title: '我的询价',

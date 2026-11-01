@@ -39,6 +39,8 @@ export default {
     projectNoPlaceholder: '项目号',
     allCategories: '全部材料类别',
     allOwners: '全部负责人',
+    /** 负责人、PD 负责人、创建人之一是本人 */
+    mine: '只看与我相关',
     dateFrom: '创建日期起',
     dateTo: '止',
   },

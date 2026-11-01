@@ -4,11 +4,17 @@ const portal: LocaleMessages['portal'] = {
   home: {
     welcome: 'Welcome, {name}',
     intro:
-      'Here are the RFQs your company has been invited to. Please review the specifications and product images and submit your quotation before the deadline.',
-    pending: 'To do',
-    evaluating: 'Under evaluation',
-    closed: 'Closed',
-    goList: 'View RFQs',
+      'Here are the RFQs your company has been invited to. Please review the specifications and product images and submit your quotation before the deadline. All times are Beijing Time (UTC+8).',
+    cards: {
+      pendingQuotes: 'Quotations Due',
+      negotiations: 'Negotiations Awaiting Reply',
+      recentResults: 'Recent Results',
+    },
+    recentHint: 'Awarded in the last {days} days',
+    submitted: 'Submitted',
+    notSubmitted: 'Not submitted',
+    offeredAt: 'Buyer proposal sent {time}',
+    evaluatedAt: 'Awarded {time}',
   },
   quotes: {
     title: 'My RFQs',

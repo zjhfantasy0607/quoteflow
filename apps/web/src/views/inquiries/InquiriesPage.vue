@@ -7,7 +7,7 @@ import {
 } from '@quoteflow/shared';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { inquiriesApi } from '@/api/inquiries';
 import CategoryTreeSelect from '@/components/CategoryTreeSelect.vue';
 import PageHeader from '@/components/PageHeader.vue';
@@ -18,16 +18,20 @@ import { inquiryNo } from '@/utils/inquiries';
 
 /** 询价单列表（M06 §5）：页签 + 筛选；数据权限由后端过滤 */
 const { t, locale } = useI18n();
+const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const canEdit = computed(() => auth.hasPerm('inquiry:create') || auth.hasPerm('inquiry:spec'));
 
-const tab = ref<'all' | InquiryTab>('all');
+const isTab = (v: unknown): v is InquiryTab => INQUIRY_TABS.includes(v as InquiryTab);
+// 工作台的"查看全部"带着页签和"只看与我相关"进来（M16）
+const tab = ref<'all' | InquiryTab>(isTab(route.query.tab) ? route.query.tab : 'all');
 const query = reactive({
   keyword: '',
   projectNo: '',
   materialCategoryId: null as string | null,
   ownerId: '',
+  mine: route.query.mine === 'true',
   range: null as [string, string] | null,
   page: 1,
   pageSize: 20,
@@ -46,6 +50,7 @@ async function load(): Promise<void> {
       projectNo: query.projectNo || undefined,
       materialCategoryId: query.materialCategoryId || undefined,
       ownerId: query.ownerId || undefined,
+      mine: query.mine ? 'true' : undefined,
       from: query.range?.[0],
       to: query.range?.[1],
       page: query.page,
@@ -69,6 +74,7 @@ function resetQuery(): void {
     projectNo: '',
     materialCategoryId: null,
     ownerId: '',
+    mine: false,
     range: null,
     page: 1,
   });
@@ -148,6 +154,9 @@ onMounted(async () => {
           >
             <el-option v-for="u in owners" :key="u.id" :value="u.id" :label="u.name" />
           </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-checkbox v-model="query.mine" @change="search">{{ t('inquiries.list.mine') }}</el-checkbox>
         </el-form-item>
         <el-form-item>
           <el-date-picker

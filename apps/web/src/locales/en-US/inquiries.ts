@@ -41,6 +41,8 @@ const inquiries: LocaleMessages['inquiries'] = {
     projectNoPlaceholder: 'Project No.',
     allCategories: 'All categories',
     allOwners: 'All owners',
+    /** 负责人、PD 负责人、创建人之一是本人 */
+    mine: 'Only mine',
     dateFrom: 'Created from',
     dateTo: 'to',
   },

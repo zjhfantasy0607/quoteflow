@@ -6,6 +6,7 @@ import type {
   PortalQuoteDetailDto,
   PortalQuoteListItemDto,
   PortalQuoteListParams,
+  PortalWorkbenchDto,
   QuoteFormParams,
   QuoteVersionDto,
   QuoteVersionSummaryDto,
@@ -22,6 +23,8 @@ export const portalApi = {
   /** 404 由页面自己提示 */
   quote: (id: string) => get<PortalQuoteDetailDto>(quoteUrl(id), undefined, { silent: true }),
   profile: () => get<SupplierProfileDto>('/portal/profile'),
+  /** 门户首页的待报价、议价待回复、最近结果（M16） */
+  workbench: () => get<PortalWorkbenchDto>('/portal/workbench'),
 
   // 报价填报（M09）：取值校验错误（QUOTE_VALUES_INVALID）由页面定位到行和字段，所以不弹全局提示
   saveDraft: (id: string, body: QuoteFormParams) =>

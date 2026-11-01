@@ -2,7 +2,7 @@
 import { ContractStatus, type ContractListItemDto } from '@quoteflow/shared';
 import { onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { contractsApi } from '@/api/contracts';
 import MaskedValue from '@/components/MaskedValue.vue';
 import PageHeader from '@/components/PageHeader.vue';
@@ -11,10 +11,14 @@ import { formatDateTime, formatMoney, pickName } from '@/utils/format';
 
 /** 合同列表（M14 §5）：状态页签 + 关键字、生成日期筛选；数据权限跟随询价单（后端过滤），金额按 contract.amount 脱敏 */
 const { t, locale } = useI18n();
+const route = useRoute();
 const router = useRouter();
 
 const STATUSES = Object.values(ContractStatus);
-const tab = ref<'all' | ContractStatus>('all');
+// 工作台的"查看全部"带着状态页签进来（M16）
+const tab = ref<'all' | ContractStatus>(
+  STATUSES.includes(route.query.tab as ContractStatus) ? (route.query.tab as ContractStatus) : 'all',
+);
 const query = reactive({
   keyword: '',
   range: null as [string, string] | null,
