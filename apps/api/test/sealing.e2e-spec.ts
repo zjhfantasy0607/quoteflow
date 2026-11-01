@@ -10,6 +10,7 @@ import type {
   RoundQuoteDetailDto,
   RoundResponsesDto,
   SupplierQuoteItemDto,
+  WorkbenchDto,
 } from '@quoteflow/shared';
 import { seedMaterialCategories } from '../prisma/seed-data/materials';
 import type { Supplier, User } from '../src/generated/prisma/client';
@@ -45,7 +46,7 @@ function expectNoSecrets(value: unknown, where: string): void {
  * M11 的比价矩阵、导出与议价线程在 expectQuoteSealed()（要 inquiry:evaluate / inquiry:export）；
  * M14 的合同列表在 internalExits()，合同详情与合同里的报价附件另有兜底用例；
  * M15 的报表、统计与供应商报价记录在 reportExits()（internalExits() 会调用），开标后与 S-4 另有断言；
- * M16 的工作台把新出口补进 internalExits()
+ * M16 的工作台在 internalExits()（等待报价 / 待开标卡片只有响应家数）
  */
 describe('M10 密封测试集', () => {
   let ctx: TestContext;
@@ -145,8 +146,8 @@ describe('M10 密封测试集', () => {
   }
 
   /**
-   * 不需要 inquiry:evaluate 的出口：响应列表、询价单详情 / 轮次 / 列表、时间线、合同列表（M14）、报表与统计（M15），
-   * 有权限时还有系统日志与邮件记录
+   * 不需要 inquiry:evaluate 的出口：响应列表、询价单详情 / 轮次 / 列表、时间线、合同列表（M14）、报表与统计（M15）、
+   * 工作台（M16），有权限时还有系统日志与邮件记录
    */
   async function internalExits(agent: Agent, name: string): Promise<void> {
     await reportExits(agent, name);
@@ -170,6 +171,14 @@ describe('M10 密封测试集', () => {
       '/api/contracts?page=1&pageSize=50',
     ];
     for (const url of pages) expectNoSecrets((await agent.get(url).expect(200)).body, `${name} ${url}`);
+    const workbench: WorkbenchDto = (await agent.get('/api/workbench').expect(200)).body;
+    // 等待报价时三个角色都在"等待报价"里看到它；截止后只有能开标的主管在"待开标"里看到
+    const round = await ctx.prisma.inquiryRound.findUniqueOrThrow({ where: { id: p.roundId } });
+    const card = round.status === 'WAITING_QUOTES' ? workbench.waitingQuotes : workbench.toOpen;
+    if (round.status === 'QUOTES_CLOSED' && name !== 'manager') expect(card).toBeUndefined();
+    else
+      expect(card!.items.find((i) => i.id === p.inquiry.id)!.progress).toEqual({ responded: 2, invited: 3 });
+    expectNoSecrets(workbench, `${name} workbench`);
   }
 
   /** 管理员的系统日志与邮件记录（列表和详情） */

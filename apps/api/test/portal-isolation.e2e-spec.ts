@@ -318,12 +318,26 @@ describe('M08 供应商门户与隔离', () => {
       '/api/suppliers',
       '/api/system/users',
       '/api/system/emails',
+      '/api/workbench',
     ]) {
       await portalA.get(path).expect(403);
     }
     await portalA.put(`/api/inquiries/${x.id}/rounds/1/shortlist`).send({ quoteIds: [] }).expect(403);
     await buyer.get('/api/portal/quotes').expect(403);
     await buyer.get('/api/portal/profile').expect(403);
+    await buyer.get('/api/portal/workbench').expect(403);
+  });
+
+  it('M16 门户工作台只有本供应商的报价单，不含内部信息', async () => {
+    const body = (await portalA.get('/api/portal/workbench').expect(200)).body;
+    const keys = keysOf(body);
+    for (const key of FORBIDDEN_KEYS) expect(keys.has(key)).toBe(false);
+    expect(JSON.stringify(body)).not.toContain(PROJECT_NO);
+    const ids = [...body.pendingQuotes.items, ...body.negotiations.items, ...body.recentResults.items].map(
+      (q: { id: string }) => q.id,
+    );
+    expect(ids).toContain((await quoteOf(x.id, s.a)).id);
+    expect(await ctx.prisma.quote.count({ where: { id: { in: ids }, supplierId: { not: s.a.id } } })).toBe(0);
   });
 
   it('M11 议价接口同样隔离：别家的报价单 404，内部用户 403；门户的议价线程不含内部信息', async () => {

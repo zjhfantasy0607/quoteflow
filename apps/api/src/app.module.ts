@@ -28,6 +28,7 @@ import { RolesModule } from './modules/roles/roles.controller';
 import { StatsModule } from './modules/stats/stats.controller';
 import { SuppliersModule } from './modules/suppliers/suppliers.controller';
 import { UsersModule } from './modules/users/users.controller';
+import { WorkbenchModule } from './modules/workbench/workbench.controller';
 import { PrismaModule } from './prisma/prisma.service';
 
 // 定时任务只在 JOBS_ENABLED 不为 false 时注册（e2e 测试里关闭，改为直接调用 job.run()）
@@ -63,6 +64,7 @@ const scheduler = process.env.JOBS_ENABLED === 'false' ? [] : [ScheduleModule.fo
     PortalModule,
     StatsModule,
     ReportsModule,
+    WorkbenchModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })

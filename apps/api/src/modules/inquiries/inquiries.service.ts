@@ -56,6 +56,11 @@ const assignableUserWhere: Prisma.UserWhereInput = {
 
 const iso = (d: Date | null) => d?.toISOString() ?? null;
 
+/** 与我相关：负责人、PD 负责人、创建人之一是本人（列表的 mine 筛选、工作台"我的草稿"） */
+export function mineWhere(user: Pick<AuthUser, 'id'>): Prisma.InquiryWhereInput {
+  return { OR: [{ ownerId: user.id }, { pdUserId: user.id }, { createdById: user.id }] };
+}
+
 /** 询价单表头、列表、详情、审批记录与操作日志（M06） */
 @Injectable()
 export class InquiriesService {
@@ -74,7 +79,7 @@ export class InquiriesService {
   async list(user: AuthUser, query: InquiryListQuery): Promise<Paginated<InquiryListItemDto>> {
     const index = await this.categories.loadIndex();
     const where: Prisma.InquiryWhereInput = {
-      AND: [this.scope.inquiryWhere(user), this.filters(query, index)],
+      AND: [this.scope.inquiryWhere(user), this.filters(user, query, index)],
     };
     const [rows, total] = await Promise.all([
       this.prisma.inquiry.findMany({
@@ -401,7 +406,7 @@ export class InquiriesService {
     }
   }
 
-  private filters(query: InquiryListQuery, index: CategoryIndex): Prisma.InquiryWhereInput {
+  private filters(user: AuthUser, query: InquiryListQuery, index: CategoryIndex): Prisma.InquiryWhereInput {
     const contains = (value: string) => ({ contains: value, mode: 'insensitive' as const });
     const and: Prisma.InquiryWhereInput[] = [];
     if (query.tab) and.push(INQUIRY_TAB_FILTER[query.tab]);
@@ -421,6 +426,7 @@ export class InquiriesService {
       and.push({ materialCategoryId: { in: index.subtreeIds(query.materialCategoryId) } });
     }
     if (query.ownerId) and.push({ ownerId: query.ownerId });
+    if (query.mine) and.push(mineWhere(user));
     if (query.from) and.push({ createdAt: { gte: inAppTz(query.from).startOf('day').toDate() } });
     if (query.to) and.push({ createdAt: { lt: inAppTz(query.to).add(1, 'day').startOf('day').toDate() } });
     return { AND: and };
