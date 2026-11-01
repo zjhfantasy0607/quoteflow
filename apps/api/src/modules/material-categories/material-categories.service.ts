@@ -88,6 +88,13 @@ export class CategoryIndex {
     return null;
   }
 
+  /** 顶级祖先（自己是顶级时就是自己）；统计"品类"按它归类（M15 §3） */
+  root(id: string): MaterialCategory | undefined {
+    let current = this.byId.get(id);
+    while (current?.parentId) current = this.byId.get(current.parentId);
+    return current;
+  }
+
   /** 自己和全部下级的 id（R03-6） */
   subtreeIds(id: string): string[] {
     if (!this.byId.has(id)) return [];

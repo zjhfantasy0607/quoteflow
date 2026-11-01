@@ -11,6 +11,11 @@ export function inAppTz(date: Date | string): dayjs.Dayjs {
   return dayjs(date).tz(APP_TZ);
 }
 
+/** 业务时区某一天（YYYY-MM-DD）的 0 点，与服务器所在时区无关 */
+export function appDayStart(day: string): dayjs.Dayjs {
+  return dayjs.tz(day, APP_TZ);
+}
+
 /** 邮件里的时间：2026-11-20 17:00（北京时间 UTC+8） / 2026-11-20 17:00 (Beijing Time, UTC+8) */
 export function formatMailTime(date: Date | string, lang: 'zh-CN' | 'en-US'): string {
   const text = inAppTz(date).format('YYYY-MM-DD HH:mm');

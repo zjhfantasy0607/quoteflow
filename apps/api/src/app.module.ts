@@ -23,7 +23,9 @@ import { NegotiationsModule } from './modules/negotiations/negotiations.controll
 import { PortalModule } from './modules/portal/portal.controller';
 import { PplModule } from './modules/ppl/ppl.controller';
 import { QuotesModule } from './modules/quotes/round-quotes.controller';
+import { ReportsModule } from './modules/reports/reports.controller';
 import { RolesModule } from './modules/roles/roles.controller';
+import { StatsModule } from './modules/stats/stats.controller';
 import { SuppliersModule } from './modules/suppliers/suppliers.controller';
 import { UsersModule } from './modules/users/users.controller';
 import { PrismaModule } from './prisma/prisma.service';
@@ -59,6 +61,8 @@ const scheduler = process.env.JOBS_ENABLED === 'false' ? [] : [ScheduleModule.fo
     NegotiationsModule,
     ContractsModule,
     PortalModule,
+    StatsModule,
+    ReportsModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })

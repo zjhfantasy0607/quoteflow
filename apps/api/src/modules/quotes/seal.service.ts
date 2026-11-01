@@ -34,6 +34,14 @@ export class SealService {
     return user.roleCodes.some((code) => roles.includes(code));
   }
 
+  /** 与 canViewQuoteContent 相同的判断，只读一次参数，返回逐轮判断的函数（报表一次处理很多轮次时用，M15） */
+  async contentVisibility(user: AuthUser): Promise<(round: SealRound) => boolean> {
+    if (user.userType !== 'INTERNAL') return () => false;
+    const roles = await this.params.get('seal.preOpenViewRoles');
+    const preOpen = user.roleCodes.some((code) => roles.includes(code));
+    return (round) => preOpen || isRoundOpened(round);
+  }
+
   /** 密封时 QUOTE_SEALED（403） */
   async assertCanViewQuoteContent(user: AuthUser, round: SealRound): Promise<void> {
     if (!(await this.canViewQuoteContent(user, round))) throw new AppException('QUOTE_SEALED');

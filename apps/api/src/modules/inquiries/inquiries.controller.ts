@@ -85,7 +85,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ContractsModule } from '../contracts/contracts.controller';
 import { MaterialCategoriesModule } from '../material-categories/material-categories.controller';
 import { MaterialsModule } from '../materials/materials.controller';
-import { PointsModule } from '../points/points.service';
+import { PointsModule } from '../points/points.controller';
 import { PplModule } from '../ppl/ppl.controller';
 import { AutoReminderJob } from './auto-reminder.job';
 import { InquiryAccessService } from './inquiry-access.service';

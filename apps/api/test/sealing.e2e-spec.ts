@@ -2,11 +2,14 @@ import type {
   AuditLogDto,
   EmailDetailDto,
   EmailListItemDto,
+  InquiryReportRowDto,
+  LogisticsReportDto,
   Paginated,
   RoleDto,
   RoundMatrixDto,
   RoundQuoteDetailDto,
   RoundResponsesDto,
+  SupplierQuoteItemDto,
 } from '@quoteflow/shared';
 import { seedMaterialCategories } from '../prisma/seed-data/materials';
 import type { Supplier, User } from '../src/generated/prisma/client';
@@ -16,6 +19,7 @@ import { resetDb } from './helpers/db';
 import { createSupplier, createUser, seedBase } from './helpers/fixtures';
 import { ledLines, publishLedInquiry, submitQuote, type PublishedLed } from './helpers/quotes';
 import { createTestApp, TestContext } from './helpers/test-app';
+import { binaryParser, loadXlsx, sheetRows } from './helpers/xlsx';
 
 const HOUR = 3600_000;
 /** 会话 12 小时过期：截止设在 6 小时后，用例里前进不超过 12 小时 */
@@ -40,7 +44,8 @@ function expectNoSecrets(value: unknown, where: string): void {
  * 开标前用 BUYER、PURCHASE_MANAGER、ADMIN 走一遍所有能拿到报价数据的出口。
  * M11 的比价矩阵、导出与议价线程在 expectQuoteSealed()（要 inquiry:evaluate / inquiry:export）；
  * M14 的合同列表在 internalExits()，合同详情与合同里的报价附件另有兜底用例；
- * M15 的报表、M16 的工作台各自把新出口补进 internalExits()
+ * M15 的报表、统计与供应商报价记录在 reportExits()（internalExits() 会调用），开标后与 S-4 另有断言；
+ * M16 的工作台把新出口补进 internalExits()
  */
 describe('M10 密封测试集', () => {
   let ctx: TestContext;
@@ -83,11 +88,68 @@ describe('M10 密封测试集', () => {
     }
   }
 
+  /** 导出的 xlsx 里所有单元格的文字 */
+  async function xlsxText(agent: Agent, url: string): Promise<string[]> {
+    const res = await agent.get(url).buffer(true).parse(binaryParser).expect(200);
+    const wb = await loadXlsx(res.body as Buffer);
+    return wb.worksheets.flatMap((ws) =>
+      sheetRows(ws)
+        .flat()
+        .map((cell) => String(cell ?? '')),
+    );
+  }
+
   /**
-   * 不需要 inquiry:evaluate 的出口：响应列表、询价单详情 / 轮次 / 列表、时间线、合同列表（M14），
+   * M15 报表与统计：询报价单统计里本轮金额密封、物流明细不含未开标的轮次（S-3）、供应商报价记录密封；
+   * 有 report:export 的人导出的询报价单统计、物流明细、统计看板也没有报价内容
+   */
+  async function reportExits(agent: Agent, name: string): Promise<void> {
+    const report: Paginated<InquiryReportRowDto> = (await agent.get('/api/reports/inquiries').expect(200))
+      .body;
+    const row = report.items.find((r) => r.roundId === p.roundId)!;
+    expect(row).toMatchObject({
+      sealed: true,
+      quotedCount: 2,
+      minTotal: null,
+      maxTotal: null,
+      avgTotal: null,
+    });
+    const logistics: LogisticsReportDto = (await agent.get('/api/reports/logistics').expect(200)).body;
+    expect(logistics.items.filter((r) => r.inquiry.id === p.inquiry.id)).toEqual([]);
+    const quotes: Paginated<SupplierQuoteItemDto> = (
+      await agent.get(`/api/suppliers/${s.a.id}/quotes`).expect(200)
+    ).body;
+    expect(quotes.items.find((q) => q.id === p.quotes[0])).toMatchObject({ sealed: true, totalAmount: null });
+    const pages = [
+      '/api/reports/points-summary',
+      '/api/reports/points-ledger',
+      '/api/stats/projects',
+      '/api/stats/response-speed',
+      '/api/stats/win-rate',
+      '/api/stats/cycle-time',
+    ];
+    for (const value of [report, logistics, quotes]) expectNoSecrets(value, `${name} reports`);
+    for (const url of pages) expectNoSecrets((await agent.get(url).expect(200)).body, `${name} ${url}`);
+    if (name === 'buyer') {
+      // 采购员没有 report:export
+      await agent.get('/api/reports/inquiries/export').expect(403);
+      return;
+    }
+    for (const url of [
+      '/api/reports/inquiries/export',
+      '/api/reports/logistics/export',
+      '/api/stats/export',
+    ]) {
+      expectNoSecrets(await xlsxText(agent, url), `${name} ${url}`);
+    }
+  }
+
+  /**
+   * 不需要 inquiry:evaluate 的出口：响应列表、询价单详情 / 轮次 / 列表、时间线、合同列表（M14）、报表与统计（M15），
    * 有权限时还有系统日志与邮件记录
    */
   async function internalExits(agent: Agent, name: string): Promise<void> {
+    await reportExits(agent, name);
     const list = await responses(agent);
     expect(list.sealed).toBe(true);
     for (const item of list.items) {
@@ -244,6 +306,12 @@ describe('M10 密封测试集', () => {
       const matrix: RoundMatrixDto = (await agents.manager.get(`${roundUrl()}/matrix`).expect(200)).body;
       expect(matrix.suppliers.map((r) => r.totalAmount)).toEqual(['6111.05', '7777.70', null]);
       await agents.manager.get(`${roundUrl()}/matrix/export`).expect(200);
+      // M15：询报价单统计跟着放开；物流报价明细仍只含开过标的轮次（S-3）
+      const report: Paginated<InquiryReportRowDto> = (
+        await agents.manager.get('/api/reports/inquiries').expect(200)
+      ).body;
+      expect(report.items[0]).toMatchObject({ sealed: false, minTotal: '6111.05', maxTotal: '7777.70' });
+      expect((await agents.manager.get('/api/reports/logistics').expect(200)).body.total).toBe(0);
       const list = await responses(agents.manager);
       expect(list.sealed).toBe(false);
       expect(list.items.map((i) => i.totalAmount)).toEqual(['6111.05', '7777.70', null]);
@@ -333,6 +401,38 @@ describe('M10 密封测试集', () => {
     expect((await agents.admin.get(quoteUrl(0)).expect(403)).body.code).toBe('FORBIDDEN');
     await agents.admin.get(`/api/files/${attachmentId}/content`).expect(403);
 
+    // M15 报表：开标后有金额，物流明细出现本轮；管理员没有 quote.amount，金额与运费为 null
+    const report: Paginated<InquiryReportRowDto> = (
+      await agents.buyer.get('/api/reports/inquiries').expect(200)
+    ).body;
+    expect(report.items.find((r) => r.roundId === p.roundId)).toMatchObject({
+      sealed: false,
+      minTotal: '6111.05',
+      maxTotal: '7777.70',
+      avgTotal: '6944.38',
+    });
+    const logistics: LogisticsReportDto = (await agents.buyer.get('/api/reports/logistics').expect(200)).body;
+    expect(logistics.items.map((r) => [r.supplier.code, r.lineNo])).toEqual([
+      ['TS-A', 1],
+      ['TS-A', 2],
+      ['TS-B', 1],
+      ['TS-B', 2],
+    ]);
+    const adminReport: Paginated<InquiryReportRowDto> = (
+      await agents.admin.get('/api/reports/inquiries').expect(200)
+    ).body;
+    expect(adminReport.items[0]).toMatchObject({
+      sealed: false,
+      minTotal: null,
+      maskedFields: ['minTotal', 'maxTotal', 'avgTotal'],
+    });
+    expectNoSecrets(adminReport, 'admin report');
+    expectNoSecrets(await xlsxText(agents.admin, '/api/reports/inquiries/export'), 'admin report export');
+    const supplierQuotes: Paginated<SupplierQuoteItemDto> = (
+      await agents.buyer.get(`/api/suppliers/${s.a.id}/quotes`).expect(200)
+    ).body;
+    expect(supplierQuotes.items[0]).toMatchObject({ sealed: false, totalAmount: '6111.05' });
+
     expectNoSecrets(
       (await agents.buyer.get(`/api/inquiries/${p.inquiry.id}/timeline`).expect(200)).body,
       'timeline',
@@ -366,6 +466,20 @@ describe('M10 密封测试集', () => {
     const list: RoundResponsesDto = (await agents.manager.get(`${url}/responses`).expect(200)).body;
     expect(list).toMatchObject({ sealed: true, items: [{ status: 'VOID' }] });
     expect(list.items[0]).not.toHaveProperty('totalAmount');
+    const report: Paginated<InquiryReportRowDto> = (
+      await agents.manager.get('/api/reports/inquiries').expect(200)
+    ).body;
+    const neverRow = report.items.find((r) => r.inquiry.id === never.inquiry.id);
+    expect(neverRow).toMatchObject({
+      roundStatus: 'CANCELLED',
+      sealed: true,
+      quotedCount: 1,
+      minTotal: null,
+    });
+    expectNoSecrets(neverRow, 'report of a cancelled round');
+    const logistics: LogisticsReportDto = (await agents.manager.get('/api/reports/logistics').expect(200))
+      .body;
+    expect(logistics.items.some((r) => r.inquiry.id === never.inquiry.id)).toBe(false);
 
     // 上一张开过标的询价取消后：报价作废，内容和合计照样能看
     await agents.manager
