@@ -16,7 +16,8 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      '/api': { target: 'http://127.0.0.1:3000', changeOrigin: false },
+      // 浏览器主流程（M17）另起一套 API 时用 QF_API_TARGET 指过去
+      '/api': { target: process.env.QF_API_TARGET ?? 'http://127.0.0.1:3000', changeOrigin: false },
     },
   },
   build: { chunkSizeWarningLimit: 2000 },

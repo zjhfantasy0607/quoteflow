@@ -20,6 +20,7 @@
     "check:i18n": "node scripts/check-i18n.mjs",
     "test": "npm run build:shared && npm run test --workspaces --if-present",
     "test:e2e": "npm run build:shared && npm run test:e2e -w @quoteflow/api",
+    "test:browser": "npm run build:shared && npm run build -w @quoteflow/api && npm run test:browser -w @quoteflow/web",
     "verify": "npm run lint && npm run typecheck && npm run check:i18n && npm run test && npm run test:e2e",
     "db:migrate": "npm run prisma:migrate -w @quoteflow/api",
     "db:deploy": "npm run prisma:deploy -w @quoteflow/api",

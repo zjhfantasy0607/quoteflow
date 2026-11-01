@@ -13,6 +13,7 @@ export default defineConfig(
       '**/node_modules/**',
       '**/coverage/**',
       '**/playwright-report/**',
+      'apps/web/e2e/.artifacts/**',
       'apps/api/prisma/migrations/**',
       'apps/api/storage/**',
       'apps/api/src/generated/**',
@@ -34,7 +35,14 @@ export default defineConfig(
     languageOptions: { globals: globals.browser },
   },
   {
-    files: ['apps/api/**/*.ts', 'packages/**/*.ts', 'scripts/**/*.mjs', '*.mjs'],
+    files: [
+      'apps/api/**/*.ts',
+      'packages/**/*.ts',
+      'scripts/**/*.mjs',
+      '*.mjs',
+      'apps/web/e2e/**',
+      'apps/web/playwright.config.ts',
+    ],
     languageOptions: { globals: globals.node },
   },
   {
@@ -46,7 +54,7 @@ export default defineConfig(
     },
   },
   {
-    files: ['scripts/**', 'apps/api/prisma/**'],
+    files: ['scripts/**', 'apps/api/prisma/**', 'apps/web/e2e/**'],
     rules: { 'no-console': 'off' },
   },
 );

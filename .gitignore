@@ -9,8 +9,12 @@ test-results/
 apps/api/storage/
 apps/api/src/generated/
 apps/api/dist-seed/
+apps/web/e2e/.artifacts/
 .DS_Store
 *.log
 ~$*
 Thumbs.db
 desktop.ini
+
+# staging / 生产的环境变量文件（只提交 *.env.example）
+docker/*.env
