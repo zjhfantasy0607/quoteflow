@@ -53,9 +53,25 @@ const suppliers: LocaleMessages['suppliers'] = {
   detail: {
     back: 'Back to list',
     basic: 'Basic information',
-    tabs: { accounts: 'Portal accounts' },
+    tabs: { accounts: 'Portal accounts', quotes: 'Quotations', points: 'Points' },
     disabledBanner:
       'This supplier is disabled: its portal accounts cannot sign in and it cannot be invited to quote.',
+  },
+  records: {
+    quotesHint:
+      'Quotations from this supplier (only RFQs you can access); amounts of rounds not yet opened are sealed.',
+    quotesEmpty: 'No quotations',
+    pointsEmpty: 'No points entries',
+    balance: 'Total points',
+    noResponse: 'No response',
+    fields: {
+      inquiry: 'RFQ',
+      round: 'Round',
+      status: 'Status',
+      invitedAt: 'Invited',
+      submittedAt: 'Last submitted',
+      total: 'Total (incl. tax)',
+    },
   },
   accounts: {
     create: 'Create portal account',

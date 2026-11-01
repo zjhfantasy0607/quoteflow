@@ -50,8 +50,23 @@ export default {
   detail: {
     back: '返回列表',
     basic: '基本信息',
-    tabs: { accounts: '门户账号' },
+    tabs: { accounts: '门户账号', quotes: '报价记录', points: '积分' },
     disabledBanner: '该供应商已停用：门户账号不能登录，也不能被邀请报价。',
+  },
+  records: {
+    quotesHint: '该供应商参与过的报价单（只列出你有权查看的询价单）；未开标的轮次金额密封。',
+    quotesEmpty: '暂无报价记录',
+    pointsEmpty: '暂无积分记录',
+    balance: '累计积分',
+    noResponse: '未响应',
+    fields: {
+      inquiry: '询价单',
+      round: '轮次',
+      status: '状态',
+      invitedAt: '邀请时间',
+      submittedAt: '最后提交',
+      total: '含税合计',
+    },
   },
   accounts: {
     create: '开通门户账号',

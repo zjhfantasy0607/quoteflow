@@ -138,6 +138,29 @@ export const buyerRoute: RouteRecordRaw = {
       },
     },
     {
+      path: 'stats',
+      name: 'stats',
+      component: () => import('@/views/stats/StatsPage.vue'),
+      meta: {
+        titleKey: 'nav.stats',
+        userType: 'INTERNAL',
+        perm: 'stats:view',
+        menu: { icon: 'TrendCharts', order: 500, groupKey: 'nav.statsGroup', groupIcon: 'DataAnalysis' },
+      },
+    },
+    {
+      // ?tab= 打开指定页签（inquiries / logistics / points-summary / points-ledger）
+      path: 'reports',
+      name: 'reports',
+      component: () => import('@/views/reports/ReportsPage.vue'),
+      meta: {
+        titleKey: 'nav.reports',
+        userType: 'INTERNAL',
+        perm: 'report:view',
+        menu: { icon: 'Grid', order: 501, groupKey: 'nav.statsGroup', groupIcon: 'DataAnalysis' },
+      },
+    },
+    {
       path: 'system/users',
       name: 'system-users',
       component: () => import('@/views/system/UsersPage.vue'),

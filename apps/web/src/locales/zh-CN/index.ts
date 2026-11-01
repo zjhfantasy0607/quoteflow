@@ -10,9 +10,11 @@ import materials from './materials';
 import nav from './nav';
 import negotiation from './negotiation';
 import portal from './portal';
+import reports from './reports';
 import roundDiff from './roundDiff';
 import ppl from './ppl';
 import suppliers from './suppliers';
+import stats from './stats';
 import system from './system';
 import workbench from './workbench';
 
@@ -26,6 +28,8 @@ const zhCN = {
   suppliers,
   inquiries,
   contracts,
+  stats,
+  reports,
   portal,
   ppl,
   negotiation,

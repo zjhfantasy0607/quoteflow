@@ -63,4 +63,11 @@ export default {
   EmailStatus: { PENDING: '待发送', SENT: '已发送', FAILED: '发送失败' },
   FileAccessAction: { PREVIEW: '在线预览', DOWNLOAD: '下载' },
   PointsSource: { AUTO: '自动', MANUAL: '手工' },
+  PointsRuleCode: {
+    QUOTE_ON_TIME: '准时报价',
+    FAST_RESPONSE: '快速响应',
+    WON: '中标',
+    NO_RESPONSE: '未响应',
+    MANUAL: '手工调整',
+  },
 };

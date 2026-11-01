@@ -327,6 +327,7 @@ const system: LocaleMessages['system'] = {
       material_import: 'Import materials',
       supplier_create: 'Create supplier',
       supplier_update: 'Update supplier',
+      supplier_pointsAdjust: 'Adjust supplier points',
       supplier_enable: 'Enable supplier',
       supplier_disable: 'Disable supplier',
       supplier_import: 'Import suppliers',

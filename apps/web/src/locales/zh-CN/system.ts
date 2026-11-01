@@ -303,6 +303,7 @@ export default {
       material_import: '导入材料',
       supplier_create: '新建供应商',
       supplier_update: '修改供应商',
+      supplier_pointsAdjust: '手工调整积分',
       supplier_enable: '启用供应商',
       supplier_disable: '停用供应商',
       supplier_import: '导入供应商',

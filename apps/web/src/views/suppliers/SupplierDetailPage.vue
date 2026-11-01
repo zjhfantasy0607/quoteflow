@@ -17,8 +17,10 @@ import { isMasked } from '@/utils/masked';
 import { supplierLanguageLabel } from '@/utils/suppliers';
 import SupplierAccountDialog from './SupplierAccountDialog.vue';
 import SupplierFormDialog from './SupplierFormDialog.vue';
+import SupplierPointsTab from './SupplierPointsTab.vue';
+import SupplierQuotesTab from './SupplierQuotesTab.vue';
 
-/** 供应商详情：基本信息 + 门户账号页签（R04-10）；M15 再加"报价记录 / 积分"页签 */
+/** 供应商详情：基本信息 + 门户账号（R04-10）、报价记录、积分（R15-4）页签；?tab= 打开指定页签 */
 const { t, locale } = useI18n();
 const route = useRoute();
 const router = useRouter();
@@ -32,7 +34,8 @@ const notFound = ref(false);
 const loading = ref(false);
 const accounts = ref<SupplierAccountDto[]>([]);
 const accountsLoading = ref(false);
-const tab = ref('accounts');
+const TABS = ['accounts', 'quotes', 'points'];
+const tab = ref(TABS.includes(String(route.query.tab)) ? String(route.query.tab) : 'accounts');
 const formVisible = ref(false);
 const accountVisible = ref(false);
 
@@ -308,6 +311,12 @@ watch(
                 </template>
               </el-table-column>
             </el-table>
+          </el-tab-pane>
+          <el-tab-pane :label="t('suppliers.detail.tabs.quotes')" name="quotes" lazy>
+            <SupplierQuotesTab :key="supplier.id" :supplier-id="supplier.id" />
+          </el-tab-pane>
+          <el-tab-pane :label="t('suppliers.detail.tabs.points')" name="points" lazy>
+            <SupplierPointsTab :key="supplier.id" :supplier="supplier" />
           </el-tab-pane>
         </el-tabs>
       </el-card>

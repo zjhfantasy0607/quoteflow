@@ -86,6 +86,13 @@ const enums: LocaleMessages['enums'] = {
   EmailStatus: { PENDING: 'Pending', SENT: 'Sent', FAILED: 'Failed' },
   FileAccessAction: { PREVIEW: 'Preview', DOWNLOAD: 'Download' },
   PointsSource: { AUTO: 'Automatic', MANUAL: 'Manual' },
+  PointsRuleCode: {
+    QUOTE_ON_TIME: 'Quoted on time',
+    FAST_RESPONSE: 'Fast response',
+    WON: 'Won',
+    NO_RESPONSE: 'No response',
+    MANUAL: 'Manual adjustment',
+  },
 };
 
 export default enums;
