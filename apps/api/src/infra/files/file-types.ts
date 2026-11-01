@@ -61,8 +61,12 @@ export function fixUploadName(name: string): string {
   return decoded.includes(REPLACEMENT_CHAR) ? name : decoded;
 }
 
-/** Content-Disposition，兼容中文文件名（RFC 5987） */
+/**
+ * Content-Disposition，兼容中文文件名（RFC 5987）。文件名来自用户上传，防头部注入：filename 只留可打印 ASCII 且去掉引号、
+ * 反斜杠；filename* 全部百分号编码（encodeURIComponent 不编码的 ' ( ) * 也编码，它们不在 RFC 5987 的 attr-char 里）
+ */
 export function contentDisposition(type: 'inline' | 'attachment', name: string): string {
-  const fallback = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\\r\n]/g, '_');
-  return `${type}; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+  const fallback = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+  const encoded = encodeURIComponent(name).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `${type}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 }

@@ -12,6 +12,7 @@ import type {
   SupplierQuoteItemDto,
   WorkbenchDto,
 } from '@quoteflow/shared';
+import { FIELD_PERMISSION_CODES, PERMISSION_CODES } from '@quoteflow/shared';
 import { seedMaterialCategories } from '../prisma/seed-data/materials';
 import type { Supplier, User } from '../src/generated/prisma/client';
 import { RoundDeadlineJob } from '../src/modules/inquiries/round-deadline.job';
@@ -19,6 +20,7 @@ import { Agent, loginAs } from './helpers/auth';
 import { resetDb } from './helpers/db';
 import { createSupplier, createUser, seedBase } from './helpers/fixtures';
 import { ledLines, publishLedInquiry, submitQuote, type PublishedLed } from './helpers/quotes';
+import { fillPath, listRoutes, ROUTE_QUERY } from './helpers/routes';
 import { createTestApp, TestContext } from './helpers/test-app';
 import { binaryParser, loadXlsx, sheetRows } from './helpers/xlsx';
 
@@ -46,12 +48,15 @@ function expectNoSecrets(value: unknown, where: string): void {
  * M11 的比价矩阵、导出与议价线程在 expectQuoteSealed()（要 inquiry:evaluate / inquiry:export）；
  * M14 的合同列表在 internalExits()，合同详情与合同里的报价附件另有兜底用例；
  * M15 的报表、统计与供应商报价记录在 reportExits()（internalExits() 会调用），开标后与 S-4 另有断言；
- * M16 的工作台在 internalExits()（等待报价 / 待开标卡片只有响应家数）
+ * M16 的工作台在 internalExits()（等待报价 / 待开标卡片只有响应家数）；
+ * M17 起另有 allExits()：拥有全部功能权限和敏感字段的账号把每个内部 GET 接口枚举一遍，以后新增的出口自动纳入
  */
 describe('M10 密封测试集', () => {
   let ctx: TestContext;
   let users: Record<string, User>;
   let agents: Record<'buyer' | 'manager' | 'admin', Agent>;
+  /** 自定义角色 SUPER：全部 46 个功能权限、4 个敏感字段、全部数据（不在 seal.preOpenViewRoles 里） */
+  let superAgent: Agent;
   let portal: Record<'a' | 'b', Agent>;
   let s: Record<'a' | 'b' | 'c', Supplier>;
   let category: Record<string, string>;
@@ -181,6 +186,58 @@ describe('M10 密封测试集', () => {
     expectNoSecrets(workbench, `${name} workbench`);
   }
 
+  /**
+   * S-3 全量枚举：SUPER 把每个内部 GET 接口按真实 id 调一遍。要么正常返回且没有报价内容（导出的 xlsx 也看单元格），
+   * 要么被密封拦下（QUOTE_SEALED / FILE_ACCESS_DENIED）；第 1 轮没有规格对比（404）
+   */
+  async function allExits(): Promise<void> {
+    const role = await ctx.prisma.role.findUniqueOrThrow({ where: { code: 'BUYER' } });
+    const email = await ctx.prisma.emailMessage.findFirstOrThrow();
+    const ids: Record<string, string> = {
+      inquiries: p.inquiry.id,
+      suppliers: s.a.id,
+      files: attachmentId,
+      quote: p.quotes[0],
+      'material-categories': category['LED-2835'],
+      'system/users': users.buyer.id,
+      'system/roles': role.id,
+      'system/emails': email.id,
+    };
+    const failures: string[] = [];
+    let scanned = 0;
+    for (const route of listRoutes(ctx.app)) {
+      if (route.method !== 'GET' || route.isPublic || !route.userTypes.includes('INTERNAL')) continue;
+      const path = fillPath(route.path, ids);
+      if (!path) continue;
+      const url = path + (ROUTE_QUERY[route.path] ?? '');
+      const res = await superAgent.get(url).buffer(true).parse(binaryParser);
+      const type = String(res.headers['content-type'] ?? '');
+      const body = type.includes('application/json')
+        ? JSON.parse((res.body as Buffer).toString('utf8'))
+        : null;
+      if (res.status === 403 && ['QUOTE_SEALED', 'FILE_ACCESS_DENIED'].includes(body?.code)) continue;
+      if (res.status === 404 && route.path.endsWith('/diff')) continue;
+      if (res.status !== 200) {
+        failures.push(`${url} → ${res.status} ${body?.code ?? ''}`);
+        continue;
+      }
+      scanned += 1;
+      try {
+        if (type.includes('spreadsheetml')) {
+          const wb = await loadXlsx(res.body as Buffer);
+          expectNoSecrets(
+            wb.worksheets.flatMap((ws) => sheetRows(ws).flat()),
+            url,
+          );
+        } else expectNoSecrets(body ?? (res.body as Buffer).toString('latin1'), url);
+      } catch (err) {
+        failures.push((err as Error).message);
+      }
+    }
+    expect(failures).toEqual([]);
+    expect(scanned).toBeGreaterThan(50);
+  }
+
   /** 管理员的系统日志与邮件记录（列表和详情） */
   async function adminExits(): Promise<void> {
     const logs: Paginated<AuditLogDto> = (
@@ -233,6 +290,17 @@ describe('M10 密封测试集', () => {
       admin: await loginAs(ctx, users.admin),
     };
     portal = { a: await loginAs(ctx, users.a), b: await loginAs(ctx, users.b) };
+    await ctx.prisma.role.create({
+      data: {
+        code: 'SUPER',
+        nameZh: '全部权限',
+        nameEn: 'All permissions',
+        dataScope: 'ALL',
+        permissions: [...PERMISSION_CODES],
+        fieldPermissions: [...FIELD_PERMISSION_CODES],
+      },
+    });
+    superAgent = await loginAs(ctx, await createUser(ctx.prisma, { username: 'super', roles: ['SUPER'] }));
 
     p = await publishLedInquiry(
       ctx.prisma,
@@ -269,6 +337,8 @@ describe('M10 密封测试集', () => {
     // 管理员没有 inquiry:evaluate
     await expectQuoteSealed(agents.admin, 'FORBIDDEN');
     await adminExits();
+    await expectQuoteSealed(superAgent);
+    await allExits();
   });
 
   it('S-1 邮件表里的所有邮件（含发给内部用户的审批邮件）正文都没有报价内容', async () => {
@@ -343,6 +413,7 @@ describe('M10 密封测试集', () => {
     await expectQuoteSealed(agents.buyer);
     await expectQuoteSealed(agents.manager);
     await adminExits();
+    await allExits();
   });
 
   it('S-1 M14 合同也经过 SealService（兜底）：轮次没开过标的合同列表金额为 null、详情 QUOTE_SEALED、报价附件不能经合同访问', async () => {
