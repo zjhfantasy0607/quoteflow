@@ -7,6 +7,7 @@ import {
   idSchema,
   optionalText,
   pageQuerySchema,
+  queryBoolean,
   requiredText,
 } from './common';
 
@@ -47,6 +48,8 @@ const inquiryFilterFields = {
   /** 材料类别，包含所有下级 */
   materialCategoryId: idSchema.optional(),
   ownerId: idSchema.optional(),
+  /** 只看与我相关的：负责人、PD 负责人、创建人之一是本人（工作台"我的草稿"的"查看全部"，M16） */
+  mine: queryBoolean.optional(),
   /** 创建日期区间（含当天，按 UTC+8） */
   from: dateQueryParam,
   to: dateQueryParam,
