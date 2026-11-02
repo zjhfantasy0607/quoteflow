@@ -92,6 +92,14 @@ describe('M01 认证与会话', () => {
     await agent.get('/api/auth/me').expect(401);
   });
 
+  it('R01-3 会话 cookie 的有效期是相对的 Max-Age（等于会话有效期），与服务端时钟的绝对时间无关', async () => {
+    const res = await anonymous(ctx)
+      .post('/api/auth/login')
+      .send({ username: 'buyer.a', password: TEST_PASSWORD })
+      .expect(200);
+    expect(String(res.headers['set-cookie'])).toMatch(/Max-Age=43200/);
+  });
+
   it('R01-3 有操作时滑动续期并刷新 cookie', async () => {
     const agent = await loginAs(ctx, buyer);
     ctx.clock.advanceHours(6);

@@ -71,13 +71,17 @@ export class SessionService {
     return this.config.get('SESSION_COOKIE_NAME');
   }
 
+  /**
+   * cookie 的有效期用相对的 Max-Age（会话剩余时长），不写按 ClockService 算出的绝对时间：
+   * 测试时钟、平移过的时钟、客户端时钟都可能与真实时间不一致，绝对时间会让浏览器（或 supertest）提前丢掉 cookie。
+   */
   cookieOptions(expiresAt: Date): CookieOptions {
     return {
       httpOnly: true,
       sameSite: 'lax',
       secure: this.config.get('COOKIE_SECURE'),
       path: '/',
-      expires: expiresAt,
+      maxAge: Math.max(0, expiresAt.getTime() - this.clock.now().getTime()),
     };
   }
 

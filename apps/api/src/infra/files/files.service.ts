@@ -68,6 +68,8 @@ export class FilesService {
         sha256: createHash('sha256').update(file.buffer).digest('hex'),
         kind,
         uploadedById: user.id,
+        // 清理任务按 ClockService 判断"24 小时前上传"，上传时间也必须取 ClockService，不能用数据库默认的 now()
+        createdAt: this.clock.now(),
       },
     });
     return toFileDto(created);
