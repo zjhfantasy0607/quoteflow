@@ -19,6 +19,7 @@
     "format": "prettier --write \"apps/**/*.{ts,vue,json,css}\" \"packages/**/*.{ts,json}\" \"scripts/**/*.mjs\" \"*.{json,mjs}\"",
     "check:i18n": "node scripts/check-i18n.mjs",
     "docs:word": "node scripts/docs-to-word.mjs",
+    "release": "node scripts/release.mjs",
     "test": "npm run build:shared && npm run test --workspaces --if-present",
     "test:e2e": "npm run build:shared && npm run test:e2e -w @quoteflow/api",
     "test:browser": "npm run build:shared && npm run build -w @quoteflow/api && npm run test:browser -w @quoteflow/web",
@@ -41,5 +42,10 @@
     "typescript": "5.9.3",
     "typescript-eslint": "8.72.0",
     "vue-eslint-parser": "10.4.1"
+  },
+  "allowScripts": {
+    "@prisma/engines@7.10.1": true,
+    "esbuild@0.28.2": true,
+    "prisma@7.10.1": true
   }
 }

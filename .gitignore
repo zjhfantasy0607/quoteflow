@@ -21,3 +21,6 @@ docker/*.env
 
 # 镜像构建的 npm 缓存种子（scripts/docker-npm-seed.mjs）
 docker/.npm-seed/_cacache/
+
+# 不使用 Docker 部署的发布包（scripts/release.mjs）
+release/

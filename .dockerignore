@@ -16,3 +16,4 @@ docker/*.env
 docs
 *.pptx
 *.log
+release

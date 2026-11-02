@@ -1,0 +1,32 @@
+# QuoteFlow API 的 systemd 服务（不使用 Docker，docs/交付/部署手册-不使用Docker.md）。
+# 由 install.sh 安装到 /etc/systemd/system/quoteflow-api.service，每次安装 / 升级都会覆盖；
+# 需要本机调整（如内存上限）时用 systemctl edit quoteflow-api 写 drop-in，不要直接改这个文件。
+[Unit]
+Description=QuoteFlow API
+After=network-online.target postgresql.service postgresql-15.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=quoteflow
+Group=quoteflow
+WorkingDirectory=/opt/quoteflow/current/apps/api
+# NO_COLOR：日志进 journald，不要终端颜色码
+Environment=TZ=UTC NO_COLOR=1 PRISMA_HIDE_UPDATE_MESSAGE=true CHECKPOINT_DISABLE=1
+EnvironmentFile=/etc/quoteflow/quoteflow.env
+# node 按手册装在 /usr/local/bin；用其他方式安装的 Node.js 只要在 PATH 里也能找到
+ExecStart=/usr/bin/env node dist/main.js
+SyslogIdentifier=quoteflow-api
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+# 加固：只有上传文件目录可写
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/quoteflow
+
+[Install]
+WantedBy=multi-user.target

@@ -18,6 +18,7 @@ export default defineConfig(
       'apps/api/storage/**',
       'apps/api/src/generated/**',
       'docs/**',
+      'release/**',
     ],
   },
   js.configs.recommended,

@@ -1,0 +1,5 @@
+# QuoteFlow 每日备份（不使用 Docker，docs/交付/部署手册-不使用Docker.md §9）。
+# 复制到 /etc/cron.d/quoteflow-backup（文件名不能带点，否则 cron 不读）：每天 02:30 执行，备份保留 30 天。
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+30 2 * * * root bash /opt/quoteflow/current/deploy/backup.sh /var/backups/quoteflow 30 >> /var/log/quoteflow-backup.log 2>&1
