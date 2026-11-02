@@ -12,9 +12,9 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
   const config = app.get(AppConfig);
   app.useLogger(LEVELS.slice(0, LEVELS.indexOf(config.get('LOG_LEVEL')) + 1));
-  configureApp(app);
+  configureApp(app, config.get('TRUST_PROXY'));
   app.enableShutdownHooks();
-  await app.listen(config.get('API_PORT'), '127.0.0.1');
+  await app.listen(config.get('API_PORT'), config.get('API_HOST'));
 }
 
 void bootstrap();

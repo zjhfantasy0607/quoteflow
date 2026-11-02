@@ -1,0 +1,124 @@
+# QuoteFlow 测试 / 演示环境（M17 §2.2）：本机 Docker 上的整套系统，与开发依赖（compose.dev.yml）互不影响。
+#
+#   首次：cp docker/staging.env.example docker/staging.env，改里面的密码和密钥；
+#         网络慢时先 node scripts/docker-npm-seed.mjs（把本机 npm 缓存里的包交给镜像构建，可选）
+#   启动：docker compose -f docker/compose.staging.yml --env-file docker/staging.env up -d --build
+#   基础数据：docker compose -f docker/compose.staging.yml --env-file docker/staging.env run --rm api-tools npx prisma db seed
+#   演示数据：docker compose -f docker/compose.staging.yml --env-file docker/staging.env run --rm api-tools node dist-seed/prisma/seed-demo.js
+#   停止：docker compose -f docker/compose.staging.yml --env-file docker/staging.env stop      （保留数据）
+#
+# 端口只绑定 127.0.0.1：18080 → 前端（/api 由 nginx 反代到 api），18026 → Mailpit Web UI。
+# 数据在命名卷 quoteflow-staging_pgdata（数据库）、quoteflow-staging_uploads（上传文件）。详见 docs/交付/部署手册.md
+
+name: quoteflow-staging
+
+x-api-env: &api-env
+  DATABASE_URL: postgresql://quoteflow:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in docker/staging.env}@postgres:5432/quoteflow?schema=public
+  APP_BASE_URL: ${APP_BASE_URL:-http://127.0.0.1:18080}
+  SESSION_COOKIE_NAME: qf_sid
+  COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  STORAGE_DRIVER: local
+  STORAGE_DIR: /app/storage
+  MAIL_TRANSPORT: smtp
+  SMTP_HOST: ${SMTP_HOST:-mailpit}
+  SMTP_PORT: ${SMTP_PORT:-1025}
+  SMTP_SECURE: ${SMTP_SECURE:-false}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASS: ${SMTP_PASS:-}
+  MAIL_FROM: ${MAIL_FROM:-QuoteFlow <noreply@quoteflow.local>}
+  EXCEL_SIGNING_SECRET: ${EXCEL_SIGNING_SECRET:?set EXCEL_SIGNING_SECRET in docker/staging.env}
+  EXCEL_SHEET_PASSWORD: ${EXCEL_SHEET_PASSWORD:?set EXCEL_SHEET_PASSWORD in docker/staging.env}
+  # nginx 在容器私有网段，信任它转发的 X-Forwarded-For（登录限流、审计按真实客户端 IP）
+  TRUST_PROXY: uniquelocal
+  PRISMA_HIDE_UPDATE_MESSAGE: 'true'
+  TZ: UTC
+
+services:
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: quoteflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in docker/staging.env}
+      POSTGRES_DB: quoteflow
+      TZ: UTC
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U quoteflow -d quoteflow']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:18026:8025'
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/api.Dockerfile
+      target: runtime
+      # 可选的 npm 缓存种子（scripts/docker-npm-seed.mjs），网络慢时大幅加快首次构建
+      additional_contexts:
+        npm-seed: ./.npm-seed
+    image: quoteflow-staging-api
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: '3000'
+      JOBS_ENABLED: 'true'
+      LOG_LEVEL: log
+    volumes:
+      - uploads:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: docker/web.Dockerfile
+      # 可选的 npm 缓存种子（scripts/docker-npm-seed.mjs），网络慢时大幅加快首次构建
+      additional_contexts:
+        npm-seed: ./.npm-seed
+    image: quoteflow-staging-web
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:18080:80'
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # 一次性工具：基础数据、演示数据（全量依赖的构建镜像；演示数据要拨时钟，所以不用 production）。
+  # 以 node 用户运行，与 api 写同一个上传卷时文件属主一致
+  api-tools:
+    build:
+      context: ..
+      dockerfile: docker/api.Dockerfile
+      target: build
+      # 可选的 npm 缓存种子（scripts/docker-npm-seed.mjs），网络慢时大幅加快首次构建
+      additional_contexts:
+        npm-seed: ./.npm-seed
+    image: quoteflow-staging-api-tools
+    profiles: ['tools']
+    user: node
+    working_dir: /app/apps/api
+    environment:
+      <<: *api-env
+      NODE_ENV: development
+      JOBS_ENABLED: 'false'
+      LOG_LEVEL: warn
+    volumes:
+      - uploads:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  uploads:

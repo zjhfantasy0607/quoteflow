@@ -7,6 +7,13 @@ export const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     API_PORT: z.coerce.number().int().positive().default(3000),
+    /** 监听地址：本机开发只听 127.0.0.1；容器里要听 0.0.0.0（只在容器网络里暴露，由 nginx 反代） */
+    API_HOST: z.string().min(1).default('127.0.0.1'),
+    /**
+     * Express 的 trust proxy：哪些上游代理的 X-Forwarded-For 可信（决定 req.ip，登录限流和审计按它记 IP）。
+     * 本机开发是 loopback；容器里 nginx 在私有网段，用 uniquelocal；生产按实际反向代理填（docs/交付/部署手册.md）
+     */
+    TRUST_PROXY: z.string().min(1).default('loopback'),
     APP_BASE_URL: z.url(),
     DATABASE_URL: z.string().startsWith('postgresql://'),
     DATABASE_URL_TEST: z.string().startsWith('postgresql://').optional(),

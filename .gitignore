@@ -18,3 +18,6 @@ desktop.ini
 
 # staging / 生产的环境变量文件（只提交 *.env.example）
 docker/*.env
+
+# 镜像构建的 npm 缓存种子（scripts/docker-npm-seed.mjs）
+docker/.npm-seed/_cacache/

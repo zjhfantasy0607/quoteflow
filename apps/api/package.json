@@ -32,6 +32,7 @@
     "exceljs": "4.4.0",
     "helmet": "8.3.0",
     "nodemailer": "7.0.13",
+    "prisma": "7.10.1",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
     "zod": "4.6.7"
@@ -48,7 +49,6 @@
     "@types/nodemailer": "7.0.12",
     "@types/supertest": "7.2.1",
     "jest": "30.5.2",
-    "prisma": "7.10.1",
     "source-map-support": "0.5.21",
     "supertest": "7.3.1",
     "ts-jest": "29.4.15",
